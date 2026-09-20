@@ -4,35 +4,34 @@ const authMiddleware = require('../middleware/auth');
 
 const router = express.Router();
 
-// GET /api/categories (list all categories for authenticated user)
+// GET /api/categories
 router.get('/', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
-
-    const result = await pool.query(
-      'SELECT id, user_id, name, created_at FROM categories WHERE user_id = $1 ORDER BY name ASC',
-      [userId]
-    );
-
+    const result = await pool.query(`
+      SELECT id, name, created_by, is_private, created_at
+      FROM categories
+      WHERE (is_private = false) OR (created_by = $1)
+      ORDER BY name
+    `, [req.user.id]);
+    
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: err.message });
   }
 });
 
+// POST /api/categories
 router.post('/', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const { name } = req.body;
+    const { name, is_private } = req.body;
 
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Category name is required' });
     }
 
     const result = await pool.query(
-      'INSERT INTO categories (id, user_id, name, created_at) VALUES (gen_random_uuid(), $1, $2, NOW()) RETURNING id, user_id, name, created_at',
-      [userId, name.trim()]
+      'INSERT INTO categories (name, created_by, is_private) VALUES ($1, $2, $3) RETURNING id, name, created_by, is_private, created_at',
+      [name.trim(), req.user.id, is_private || false]
     );
 
     res.status(201).json(result.rows[0]);
@@ -42,31 +41,34 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
+// PUT /api/categories/:id
 router.put('/:id', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const categoryId = req.params.id;
-    const { name } = req.body;
+    const { id } = req.params;
+    const { name, is_private } = req.body;
 
-    // Validate input
     if (!name || !name.trim()) {
       return res.status(400).json({ error: 'Category name is required' });
     }
 
-    // Check the category belongs to this user (security)
+    // Check ownership
     const checkResult = await pool.query(
-      'SELECT id FROM categories WHERE id = $1 AND user_id = $2',
-      [categoryId, userId]
+      'SELECT id, created_by FROM categories WHERE id = $1',
+      [id]
     );
 
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Category not found' });
     }
 
+    if (checkResult.rows[0].created_by !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorised' });
+    }
+
     // Update it
     const result = await pool.query(
-      'UPDATE categories SET name = $1 WHERE id = $2 AND user_id = $3 RETURNING id, user_id, name, created_at',
-      [name.trim(), categoryId, userId]
+      'UPDATE categories SET name = $1, is_private = $2 WHERE id = $3 RETURNING id, name, created_by, is_private, created_at',
+      [name.trim(), is_private !== undefined ? is_private : false, id]
     );
 
     res.json(result.rows[0]);
@@ -76,25 +78,29 @@ router.put('/:id', authMiddleware, async (req, res) => {
   }
 });
 
+// DELETE /api/categories/:id
 router.delete('/:id', authMiddleware, async (req, res) => {
   try {
-    const userId = req.user.id;
-    const categoryId = req.params.id;
+    const { id } = req.params;
 
-    // Check category exists and belongs to user
+    // Check ownership
     const checkResult = await pool.query(
-      'SELECT id FROM categories WHERE id = $1 AND user_id = $2',
-      [categoryId, userId]
+      'SELECT created_by FROM categories WHERE id = $1',
+      [id]
     );
 
     if (checkResult.rows.length === 0) {
       return res.status(404).json({ error: 'Category not found' });
     }
 
+    if (checkResult.rows[0].created_by !== req.user.id) {
+      return res.status(403).json({ error: 'Not authorised' });
+    }
+
     // Check if any items use this category
     const itemsResult = await pool.query(
       'SELECT COUNT(*) as count FROM items WHERE category_id = $1',
-      [categoryId]
+      [id]
     );
 
     if (itemsResult.rows[0].count > 0) {
@@ -104,10 +110,7 @@ router.delete('/:id', authMiddleware, async (req, res) => {
     }
 
     // Delete it
-    await pool.query(
-      'DELETE FROM categories WHERE id = $1 AND user_id = $2',
-      [categoryId, userId]
-    );
+    await pool.query('DELETE FROM categories WHERE id = $1', [id]);
 
     res.json({ message: 'Category deleted' });
   } catch (err) {

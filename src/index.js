@@ -7,7 +7,8 @@ const authRoutes = require('./routes/auth');
 const photoRoutes = require('./routes/photos');
 const itemRoutes = require('./routes/items');
 const categoryRoutes = require('./routes/categories');
-
+const locationsRouter = require('./routes/locations');
+   
 const app = express();
 
 // Middleware
@@ -17,6 +18,7 @@ app.use('/api/auth', authRoutes);
 app.use('/api/photos', photoRoutes);
 app.use('/api/items', itemRoutes);
 app.use('/api/categories', categoryRoutes);
+app.use('/api/locations', locationsRouter);
 
 // Health check (no auth needed)
 app.get('/health', async (req, res) => {

@@ -1,31 +1,31 @@
-CREATE TABLE users (
+CREATE TABLE IF NOT EXISTS users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email VARCHAR(255) UNIQUE NOT NULL,
   cognito_user_id VARCHAR(255) UNIQUE NOT NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE categories (
+CREATE TABLE IF NOT EXISTS categories (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id),
   name VARCHAR(100) NOT NULL,
+  created_by UUID NOT NULL REFERENCES users(id),
+  is_private BOOLEAN DEFAULT FALSE,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE(user_id, name)
+  UNIQUE(name) WHERE is_private = false
 );
 
-CREATE TABLE items (
+CREATE TABLE IF NOT EXISTS items (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id),
   category_id UUID NOT NULL REFERENCES categories(id),
   name VARCHAR(255) NOT NULL,
   description TEXT,
   quantity INTEGER,
-  is_private BOOLEAN DEFAULT FALSE,
+  created_by UUID NOT NULL REFERENCES users(id),
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE photos (
+CREATE TABLE IF NOT EXISTS photos (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id UUID NOT NULL REFERENCES items(id) ON DELETE CASCADE,
   s3_key VARCHAR(500) NOT NULL,
@@ -33,7 +33,7 @@ CREATE TABLE photos (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE tags (
+CREATE TABLE IF NOT EXISTS tags (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   photo_id UUID NOT NULL REFERENCES photos(id) ON DELETE CASCADE,
   tag_name VARCHAR(100) NOT NULL,
@@ -42,15 +42,17 @@ CREATE TABLE tags (
   UNIQUE(photo_id, tag_name)
 );
 
-CREATE TABLE locations (
+CREATE TABLE IF NOT EXISTS locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id UUID NOT NULL REFERENCES users(id),
   name VARCHAR(255) NOT NULL,
   parent_location_id UUID REFERENCES locations(id),
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  created_by UUID NOT NULL REFERENCES users(id),
+  is_private BOOLEAN DEFAULT FALSE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE(name) WHERE is_private = false
 );
 
-CREATE TABLE item_locations (
+CREATE TABLE IF NOT EXISTS item_locations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   item_id UUID NOT NULL REFERENCES items(id),
   location_id UUID NOT NULL REFERENCES locations(id),
@@ -59,8 +61,6 @@ CREATE TABLE item_locations (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_items_user_id ON items(user_id);
-CREATE INDEX idx_items_category_id ON items(category_id);
-CREATE INDEX idx_photos_item_id ON photos(item_id);
-CREATE INDEX idx_tags_photo_id ON tags(photo_id);
-CREATE INDEX idx_locations_user_id ON locations(user_id);
+CREATE INDEX IF NOT EXISTS idx_items_category_id ON items(category_id);
+CREATE INDEX IF NOT EXISTS idx_photos_item_id ON photos(item_id);
+CREATE INDEX IF NOT EXISTS idx_tags_photo_id ON tags(photo_id);
