@@ -2,6 +2,7 @@ const { runAuthTests } = require('./auth.test');
 const { runCategoryTests } = require('./categories.test');
 const { runItemTests } = require('./items.test');
 const { runLocationTests } = require('./locations.test');
+const { runItemLocationsTests } = require('./item-locations.test');
 
 async function runAll() {
   try {
@@ -9,6 +10,7 @@ async function runAll() {
     await runCategoryTests(token);
     await runItemTests(token);
     await runLocationTests(token);
+    await runItemLocationsTests(token);
     console.log('\nAll test suites passed!');
     process.exit(0);
   } catch (err) {
