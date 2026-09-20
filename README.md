@@ -133,7 +133,7 @@ npx expo start
 
 ## Architecture Overview
 <div align="center">
-  <img src="./assets/architecture.png" alt="High Level Architecture" style="width: 50%; height: auto;" />
+  <img src="./assets/architecture.png" alt="High Level Architecture" style="width: 100%; height: auto;" />
 </div>
 
 ## Contributing
