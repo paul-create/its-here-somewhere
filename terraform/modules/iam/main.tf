@@ -37,5 +37,5 @@ resource "aws_iam_user_policy_attachment" "ecr" {
 
 resource "aws_iam_user_policy_attachment" "cloudformation" {
   user       = aws_iam_user.dev.name
-  policy_arn = "arn:aws:iam::aws:policy/CloudFormationFullAccess"
+  policy_arn = "arn:aws:iam::aws:policy/AWSCloudFormationFullAccess"
 }
