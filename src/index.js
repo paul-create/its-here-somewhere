@@ -9,6 +9,7 @@ const itemRoutes = require('./routes/items');
 const categoryRoutes = require('./routes/categories');
 const locationsRouter = require('./routes/locations');
 const itemLocationsRouter = require('./routes/item-locations');
+const searchRoutes = require('./routes/search');
    
 const app = express();
 
@@ -21,6 +22,7 @@ app.use('/api/items', itemRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/locations', locationsRouter);
 app.use('/api/items/:id/locations', itemLocationsRouter);
+app.use('/api/search', searchRoutes);
 
 // Health check (no auth needed)
 app.get('/health', async (req, res) => {
