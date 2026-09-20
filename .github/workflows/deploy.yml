@@ -1,31 +1,31 @@
-name: Deploy to AWS App Runner
+name: Deploy
 
 on:
-  push:
-    branches: [ main ]
+  workflow_dispatch:  # Manual trigger only for now
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
-
     steps:
-    - uses: actions/checkout@v2
-
-    - name: Build and push Docker image
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION: us-east-2
-      run: |
-        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com
-        docker build -t its-here-somewhere:latest .
-        docker tag its-here-somewhere:latest ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/its-here-somewhere:latest
-        docker push ${{ secrets.AWS_ACCOUNT_ID }}.dkr.ecr.$AWS_REGION.amazonaws.com/its-here-somewhere:latest
-
-    - name: Deploy to App Runner
-      env:
-        AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-        AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-        AWS_REGION: us-east-2
-      run: |
-        aws apprunner start-deployment --service-arn ${{ secrets.APP_RUNNER_SERVICE_ARN }} --region $AWS_REGION
+      - uses: actions/checkout@v4
+      
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'  # Updated from 18
+      
+      - name: Install dependencies
+        run: npm ci
+      
+      - name: Run tests
+        run: node tests/run-all.js
+        env:
+          NODE_ENV: test
+      
+      # TODO: Uncomment when App Runner is ready
+      # - name: Build and push Docker image
+      #   run: |
+      #     aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com
+      #     docker build -t its-here-somewhere .
+      #     docker tag its-here-somewhere:latest $AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/its-here-somewhere:latest
+      #     docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/its-here-somewhere:latest
