@@ -46,11 +46,16 @@ async function runPhotoTests(token) {
       });
       const itemId = itemRes.body.id;
 
-      // Tag from URL (simulating upload by using the public URL directly)
+      // Tag from local image
       const { tagPhoto } = require('../src/utils/claude');
-      const imageDataUrl = dataset.getImageDataUrl(testItem.imageFile);
-      const predictedTags = await tagPhoto(imageDataUrl);
+      const imageData = dataset.getImageDataUrl(testItem.imageFile);
       
+      // Handle both object and string returns
+      const dataUrl = typeof imageData === 'string' ? imageData : imageData.dataUrl;
+      const mimeType = typeof imageData === 'string' ? 'image/jpeg' : imageData.mimeType;
+
+      const predictedTags = await tagPhoto(dataUrl, mimeType);
+
       // Calculate metrics
       const precision = calculatePrecision(predictedTags, testItem.expectedTags);
       const recall = calculateRecall(predictedTags, testItem.expectedTags);
@@ -88,9 +93,94 @@ async function runPhotoTests(token) {
   }
 }
 
+async function runPhotoUploadTest(token) {
+  console.log('\nStarting photo upload endpoint test...\n');
+  
+  setToken(token);
+  const timestamp = Date.now();
+
+  try {
+    // Setup: create category and item
+    const catRes = await request('POST', '/api/categories', {
+      name: `PhotoUploadCat-${timestamp}`,
+      is_private: false
+    });
+    const categoryId = catRes.body.id;
+
+    const itemRes = await request('POST', '/api/items', {
+      name: `Upload Test Item-${timestamp}`,
+      category_id: categoryId
+    });
+    const itemId = itemRes.body.id;
+
+    // Read a test image from fixtures
+    const fs = require('fs');
+    const path = require('path');
+    const imagePath = path.join(__dirname, 'fixtures', 'images', 'hammer.jpeg');
+    const imageBuffer = fs.readFileSync(imagePath);
+
+    // Upload photo (multipart/form-data)
+    console.log('1. Testing POST /api/photos (multipart upload)');
+    
+    const uploadRes = await new Promise((resolve, reject) => {
+      const url = new URL(`/api/photos?itemId=${itemId}`, 'http://localhost:3000');
+      const options = {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'multipart/form-data; boundary=----boundary'
+        }
+      };
+
+      const boundary = '----boundary';
+      const body = [
+        `--${boundary}`,
+        'Content-Disposition: form-data; name="file"; filename="hammer.jpg"',
+        'Content-Type: image/jpeg',
+        '',
+        imageBuffer.toString('binary'),
+        `--${boundary}--`
+      ].join('\r\n');
+
+      const req = require('http').request(url, options, (res) => {
+        let data = '';
+        res.on('data', chunk => data += chunk);
+        res.on('end', () => {
+          try {
+            resolve({ status: res.statusCode, body: JSON.parse(data) });
+          } catch {
+            resolve({ status: res.statusCode, body: data });
+          }
+        });
+      });
+
+      req.on('error', reject);
+      req.write(body, 'binary');
+      req.end();
+    });
+
+    if (uploadRes.status !== 201) {
+      console.error('Upload failed - Status:', uploadRes.status, 'Body:', uploadRes.body);
+    }
+    assert.strictEqual(uploadRes.status, 201, `Upload failed with status ${uploadRes.status}`);
+    assert(uploadRes.body.photoId, 'Should return photoId');
+    assert(uploadRes.body.s3Url, 'Should return s3Url');
+    assert(Array.isArray(uploadRes.body.tags), 'Should return tags array');
+    assert(uploadRes.body.tags.length > 0, 'Should have at least one tag');
+    console.log(`✓ Photo uploaded successfully`);
+    console.log(`  Photo ID: ${uploadRes.body.photoId}`);
+    console.log(`  Tags: ${uploadRes.body.tags.join(', ')}\n`);
+
+    console.log('Photo upload endpoint test passed!');
+  } catch (err) {
+    console.error('Test failed:', err.message);
+    process.exit(1);
+  }
+}
+
 if (require.main === module) {
   console.error('Run via test suite');
   process.exit(1);
 }
 
-module.exports = { runPhotoTests };
+module.exports = { runPhotoTests, runPhotoUploadTest };

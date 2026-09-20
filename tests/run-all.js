@@ -3,7 +3,7 @@ const { runCategoryTests } = require('./categories.test');
 const { runItemTests } = require('./items.test');
 const { runLocationTests } = require('./locations.test');
 const { runItemLocationsTests } = require('./item-locations.test');
-const { runPhotoTests } = require('./photos.test');
+const { runPhotoTests, runPhotoUploadTest } = require('./photos.test');
 
 const tests = {
   auth: { fn: runAuthTests, requiresAuth: false },
@@ -11,7 +11,10 @@ const tests = {
   items: { fn: runItemTests, requiresAuth: true },
   locations: { fn: runLocationTests, requiresAuth: true },
   'item-locations': { fn: runItemLocationsTests, requiresAuth: true },
-  photos: { fn: runPhotoTests, requiresAuth: true }
+  photos: { fn: async (token) => {
+    await runPhotoTests(token);
+    await runPhotoUploadTest(token);
+    }, requiresAuth: true },
 };
 
 async function runAll() {

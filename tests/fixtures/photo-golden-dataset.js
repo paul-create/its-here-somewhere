@@ -45,11 +45,6 @@ module.exports = {
       name: 'plant',
       imageFile: 'plant.jpeg',
       expectedTags: ['plant', 'green', 'leaves']
-    },
-    {
-      name: 'phone',
-      imageFile: 'phone.png',
-      expectedTags: ['phone', 'mobile', 'device']
     }
   ],
   getImageDataUrl

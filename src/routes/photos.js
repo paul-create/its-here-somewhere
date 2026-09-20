@@ -9,7 +9,7 @@ const { tagPhoto } = require('../utils/claude');
 const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
-// POST /api/photos (upload photo and tag it)
+// POST /api/photos (upload photo, tag with Claude, store in DB)
 router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
   try {
     const { itemId } = req.query;
@@ -19,13 +19,22 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
       return res.status(400).json({ error: 'File and itemId required' });
     }
 
+    // Verify item exists
+    const itemCheck = await pool.query('SELECT id FROM items WHERE id = $1', [itemId]);
+    if (itemCheck.rows.length === 0) {
+      return res.status(404).json({ error: 'Item not found' });
+    }
+
     // Upload to S3
     const { s3Key, s3Url } = await uploadPhotoToS3(file, itemId);
 
-    // Tag with Claude
-    const tags = await tagPhoto(s3Url);
+    // Tag with Claude - convert buffer to base64
+    const base64Image = file.buffer.toString('base64');
+    const mediaType = file.mimetype || 'image/jpeg';
+    const imageDataUrl = `data:${mediaType};base64,${base64Image}`;
+    const tags = await tagPhoto(imageDataUrl, mediaType);
 
-    // Store photo metadata in PostgreSQL
+    // Store photo metadata
     const photoId = randomUUID();
     await pool.query(
       'INSERT INTO photos (id, item_id, s3_key, uploaded_by, created_at) VALUES ($1, $2, $3, $4, NOW())',
@@ -44,7 +53,7 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
       photoId, 
       s3Url, 
       tags,
-      message: 'Photo uploaded and tagged' 
+      message: 'Photo uploaded and tagged successfully' 
     });
   } catch (err) {
     console.error(err);
