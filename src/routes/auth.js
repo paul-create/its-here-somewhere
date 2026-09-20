@@ -16,13 +16,13 @@ router.post('/signup', async (req, res) => {
     }
 
     // Create user in Cognito
-    const cognitoUsername = await createCognitoUser(email, password);
+    const cognitoUserId = await createCognitoUser(email, password);
 
     // Create user in PostgreSQL
     const userId = randomUUID();
     await pool.query(
       'INSERT INTO users (id, email, cognito_user_id, created_at) VALUES ($1, $2, $3, NOW())',
-      [userId, email, cognitoUsername]
+      [userId, email, cognitoUserId]
     );
 
     res.status(201).json({ message: 'User created', userId });

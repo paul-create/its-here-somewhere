@@ -8,8 +8,8 @@ const clientId = process.env.COGNITO_CLIENT_ID;
 
 // Create user in Cognito
 async function createCognitoUser(email, password) {
-  const { AdminCreateUserCommand, AdminSetUserPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
-  
+  const { AdminSetUserPasswordCommand } = require('@aws-sdk/client-cognito-identity-provider');
+
   try {
     // Create user with temporary password
     const createCommand = new AdminCreateUserCommand({
@@ -18,9 +18,16 @@ async function createCognitoUser(email, password) {
       TemporaryPassword: password,
       MessageAction: 'SUPPRESS'
     });
-    
-    await client.send(createCommand);
-    
+
+    const createResponse = await client.send(createCommand);
+
+    // Extract Cognito user ID (sub) from user attributes
+    const cognitoUserId = createResponse.User.Attributes.find(attr => attr.Name === 'sub')?.Value;
+
+    if (!cognitoUserId) {
+      throw new Error('Failed to extract Cognito user ID');
+    }
+
     // Set permanent password
     const setPasswordCommand = new AdminSetUserPasswordCommand({
       UserPoolId: userPoolId,
@@ -28,10 +35,10 @@ async function createCognitoUser(email, password) {
       Password: password,
       Permanent: true
     });
-    
+
     await client.send(setPasswordCommand);
-    
-    return email;
+
+    return cognitoUserId;
   } catch (err) {
     throw new Error(`Cognito signup failed: ${err.message}`);
   }

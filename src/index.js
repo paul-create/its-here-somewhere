@@ -5,6 +5,8 @@ const pool = require('./db');
 const authMiddleware = require('./middleware/auth');
 const authRoutes = require('./routes/auth');
 const photoRoutes = require('./routes/photos');
+const itemRoutes = require('./routes/items');
+const categoryRoutes = require('./routes/categories');
 
 const app = express();
 
@@ -13,6 +15,8 @@ app.use(cors());
 app.use(express.json());
 app.use('/api/auth', authRoutes);
 app.use('/api/photos', photoRoutes);
+app.use('/api/items', itemRoutes);
+app.use('/api/categories', categoryRoutes);
 
 // Health check (no auth needed)
 app.get('/health', async (req, res) => {
