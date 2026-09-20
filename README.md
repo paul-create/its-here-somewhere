@@ -1,7 +1,7 @@
 # It's Here Somewhere
 
 <div align="center">
-  <img src="./logo.png" alt="It's Here Somewhere Logo" width="200" />
+  <img src="./assets/its_here_somewhere_logo-transparent.png" alt="It's Here Somewhere Logo" width="200" />
 </div>
 
 ## Stop searching. Start knowing.
