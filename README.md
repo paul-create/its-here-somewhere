@@ -1,7 +1,7 @@
 # It's Here Somewhere
 
 <div align="center">
-  <img src="./assets/its_here_somewhere_logo-transparent.png" alt="It's Here Somewhere Logo" width="200" />
+  <img src="./assets/its_here_somewhere_logo-transparent.png" alt="It's Here Somewhere Logo" style="width: 50%; height: auto;" />
 </div>
 
 ## Stop searching. Start knowing.
@@ -132,25 +132,9 @@ npx expo start
 ---
 
 ## Architecture Overview
-
-```
-Client (React Native/Web)
-         |
-         v
-API Server (Node.js + Express)
-         |
-    +----|----+
-    |        |
-    v        v
-PostgreSQL  S3 Photos
-    |        |
-    +---+----+
-        |
-   Claude API (tagging)
-   AWS Cognito (auth)
-```
-
----
+<div align="center">
+  <img src="./assets/architecture.png" alt="High Level Architecture" style="width: 50%; height: auto;" />
+</div>
 
 ## Contributing
 
