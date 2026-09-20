@@ -3,12 +3,14 @@ const express = require('express');
 const cors = require('cors');
 const pool = require('./db');
 const authMiddleware = require('./middleware/auth');
+const authRoutes = require('./routes/auth');
 
 const app = express();
 
 // Middleware
 app.use(cors());
 app.use(express.json());
+app.use('/api/auth', authRoutes);
 
 // Health check (no auth needed)
 app.get('/health', async (req, res) => {
