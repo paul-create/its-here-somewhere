@@ -1,7 +1,7 @@
 const { CognitoIdentityProviderClient, AdminCreateUserCommand, AdminInitiateAuthCommand } = require('@aws-sdk/client-cognito-identity-provider');
 require('dotenv').config();
 
-const client = new CognitoIdentityProviderClient({ region: 'us-east-2' });
+const client = new CognitoIdentityProviderClient({ region: 'eu-west-2' });
 
 const userPoolId = process.env.COGNITO_USER_POOL_ID;
 const clientId = process.env.COGNITO_CLIENT_ID;
