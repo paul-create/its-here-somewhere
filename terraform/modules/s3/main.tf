@@ -1,6 +1,5 @@
 resource "aws_s3_bucket" "photos" {
   bucket = var.s3_bucket_name
-  region = var.aws_region
 }
 
 resource "aws_s3_bucket_versioning" "photos" {

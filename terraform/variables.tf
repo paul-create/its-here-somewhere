@@ -8,7 +8,18 @@ variable "db_name" {
   default     = "its_here_somewhere"
 }
 
-variable "s3_bucket_suffix" {
-  description = "S3 bucket suffix for uniqueness"
-  default     = "dev"
+variable "db_username" {
+  description = "Database username"
+  default     = "postgres"
+}
+
+variable "db_password" {
+  description = "Database password"
+  sensitive   = true
+  type        = string
+}
+
+variable "s3_bucket_name" {
+  description = "S3 bucket name"
+  default     = "its-here-somewhere-photos"
 }
