@@ -1,6 +1,6 @@
 require('dotenv').config();
 
-const { request, setToken, assert } = require('./helpers');
+const { request, setToken, assert, uploadFile, trackItem } = require('./helpers');
 const dataset = require('./fixtures/photo-golden-dataset');
 
 function calculatePrecision(predicted, expected) {
@@ -33,18 +33,29 @@ async function runPhotoTests(token) {
       is_private: false
     });
     const categoryId = catRes.body.id;
+    trackItem('category', categoryId);
 
     console.log('Testing photo tagging on golden dataset:\n');
 
     for (const testItem of dataset.items) {
       console.log(`Testing: ${testItem.name}`);
 
-      // Create test item
+      // Create a location first
+      const locRes = await request('POST', '/api/locations', {
+        name: `PhotoTestLoc-${timestamp}`,
+        is_private: false
+      });
+      const locationId = locRes.body.id;
+      trackItem('location', locationId);
+
+      // Now create item WITH location
       const itemRes = await request('POST', '/api/items', {
-        name: `${testItem.name}-${timestamp}`,
-        category_id: categoryId
+        name: `Upload Test Item-${timestamp}`,
+        category_id: categoryId,
+        location_id: locationId
       });
       const itemId = itemRes.body.id;
+      trackItem('item', itemId);
 
       // Tag from local image
       const { tagPhoto } = require('../src/utils/claude');
@@ -106,58 +117,31 @@ async function runPhotoUploadTest(token) {
       is_private: false
     });
     const categoryId = catRes.body.id;
+    trackItem('category', categoryId);
 
+    // Create a location first
+    const locRes = await request('POST', '/api/locations', {
+      name: `PhotoTestLoc-${timestamp}`,
+      is_private: false
+    });
+    const locationId = locRes.body.id;
+    trackItem('location', locationId);
+
+    // Now create item WITH location
     const itemRes = await request('POST', '/api/items', {
       name: `Upload Test Item-${timestamp}`,
-      category_id: categoryId
+      category_id: categoryId,
+      location_id: locationId
     });
     const itemId = itemRes.body.id;
+    trackItem('item', itemId);
 
-    // Read a test image from fixtures
-    const fs = require('fs');
-    const path = require('path');
-    const imagePath = path.join(__dirname, 'fixtures', 'images', 'hammer.jpeg');
-    const imageBuffer = fs.readFileSync(imagePath);
-
-    // Upload photo (multipart/form-data)
     console.log('1. Testing POST /api/photos (multipart upload)');
+    console.log(`   Using itemId: ${itemId}`);
     
-    const uploadRes = await new Promise((resolve, reject) => {
-      const url = new URL(`/api/photos?itemId=${itemId}`, 'http://localhost:3000');
-      const options = {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'multipart/form-data; boundary=----boundary'
-        }
-      };
-
-      const boundary = '----boundary';
-      const body = [
-        `--${boundary}`,
-        'Content-Disposition: form-data; name="file"; filename="hammer.jpg"',
-        'Content-Type: image/jpeg',
-        '',
-        imageBuffer.toString('binary'),
-        `--${boundary}--`
-      ].join('\r\n');
-
-      const req = require('http').request(url, options, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk);
-        res.on('end', () => {
-          try {
-            resolve({ status: res.statusCode, body: JSON.parse(data) });
-          } catch {
-            resolve({ status: res.statusCode, body: data });
-          }
-        });
-      });
-
-      req.on('error', reject);
-      req.write(body, 'binary');
-      req.end();
-    });
+    const uploadRes = await uploadFile(`/api/photos?itemId=${itemId}`, 
+      { path: './tests/fixtures/images/hammer.jpeg', mimeType: 'image/jpeg' }
+    );
 
     if (uploadRes.status !== 201) {
       console.error('Upload failed - Status:', uploadRes.status, 'Body:', uploadRes.body);
@@ -169,6 +153,7 @@ async function runPhotoUploadTest(token) {
     assert(uploadRes.body.tags.length > 0, 'Should have at least one tag');
     console.log(`✓ Photo uploaded successfully`);
     console.log(`  Photo ID: ${uploadRes.body.photoId}`);
+    console.log(`  S3 URL: ${uploadRes.body.s3Url}`);
     console.log(`  Tags: ${uploadRes.body.tags.join(', ')}\n`);
 
     console.log('Photo upload endpoint test passed!');

@@ -6,6 +6,7 @@ async function runItemTests(token) {
   setToken(token);
   const timestamp = Date.now();
   let testCategoryId = null;
+  let testLocationId = null;
   let testItemId = null;
 
   try {
@@ -16,31 +17,44 @@ async function runItemTests(token) {
     });
     testCategoryId = catRes.body.id;
 
+    // Create location first
+    const locRes = await request('POST', '/api/locations', {
+      name: `ItemLoc-${timestamp}`,
+      is_private: false
+    });
+    testLocationId = locRes.body.id;
+
     // 1. POST item
     console.log('1. Testing POST /api/items');
     const postRes = await request('POST', '/api/items', {
       name: 'Teapot',
       description: 'Blue ceramic',
       quantity: 2,
-      category_id: testCategoryId
+      category_id: testCategoryId,
+      location_id: testLocationId
     });
     assert.strictEqual(postRes.status, 201, `POST failed with status ${postRes.status}`);
+    assert.strictEqual(postRes.body.location_id, testLocationId, 'Location ID not returned');
     testItemId = postRes.body.id;
-    console.log('✓ Created item\n');
+    console.log('✓ Created item with location\n');
 
     // 2. GET items
     console.log('2. Testing GET /api/items');
     const getRes = await request('GET', '/api/items');
     assert.strictEqual(getRes.status, 200, 'GET failed');
     assert(Array.isArray(getRes.body), 'Should return array');
-    console.log('✓ Retrieved items\n');
+    const createdItem = getRes.body.find(i => i.id === testItemId);
+    assert(createdItem, 'Item not found in list');
+    assert.strictEqual(createdItem.location_id, testLocationId, 'Location ID missing in list');
+    console.log('✓ Retrieved items with location_id\n');
 
     // 3. GET single item
     console.log('3. Testing GET /api/items/:id');
     const getItemRes = await request('GET', `/api/items/${testItemId}`);
     assert.strictEqual(getItemRes.status, 200, 'GET item failed');
     assert.strictEqual(getItemRes.body.name, 'Teapot', 'Wrong item name');
-    console.log('✓ Retrieved single item\n');
+    assert.strictEqual(getItemRes.body.location_id, testLocationId, 'Location ID missing');
+    console.log('✓ Retrieved single item with location_id\n');
 
     // 4. PUT item
     console.log('4. Testing PUT /api/items/:id');

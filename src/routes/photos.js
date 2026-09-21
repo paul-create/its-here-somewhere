@@ -12,11 +12,16 @@ const upload = multer({ storage: multer.memoryStorage() });
 // POST /api/photos (upload photo, tag with Claude, store in DB)
 router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
   try {
-    const { itemId } = req.query;
+    // itemId can come from query or body
+    const itemId = req.query.itemId || req.body.itemId;
     const file = req.file;
 
-    if (!file || !itemId) {
-      return res.status(400).json({ error: 'File and itemId required' });
+    if (!file) {
+      return res.status(400).json({ error: 'File required' });
+    }
+
+    if (!itemId) {
+      return res.status(400).json({ error: 'itemId required (as query param or in body)' });
     }
 
     // Verify item exists

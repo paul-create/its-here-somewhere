@@ -5,6 +5,7 @@ const { runLocationTests } = require('./locations.test');
 const { runItemLocationsTests } = require('./item-locations.test');
 const { runPhotoTests, runPhotoUploadTest } = require('./photos.test');
 const { runSearchTests } = require('./search.test');
+const { cleanup } = require('./helpers');
 
 const tests = {
   auth: { fn: runAuthTests, requiresAuth: false },
@@ -15,9 +16,14 @@ const tests = {
   photos: 
   { 
     fn: async (token) => {
-    await runPhotoTests(token);
-    await runPhotoUploadTest(token);
-    }, requiresAuth: true 
+      try {
+        await runPhotoTests(token);
+        await runPhotoUploadTest(token);
+      } finally {
+        await cleanup();
+      }
+    }, 
+    requiresAuth: true 
   },
   search: { fn: runSearchTests, requiresAuth: true },
 };
