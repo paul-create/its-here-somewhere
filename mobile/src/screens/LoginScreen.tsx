@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView } from 'react-native';
-import { TextInput, Button, Text } from 'react-native-paper';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from 'react-native';
+import { TextInput } from 'react-native-paper';
 import { useAuth } from '../context/AuthContext';
 
 export function LoginScreen({ navigation }: any) {
@@ -20,9 +20,7 @@ export function LoginScreen({ navigation }: any) {
   return (
     <ScrollView style={styles.container}>
       <View style={styles.form}>
-        <Text variant="headlineMedium" style={styles.title}>
-          Sign In
-        </Text>
+        <Text style={styles.title}>Sign In</Text>
 
         <TextInput
           label="Email"
@@ -45,23 +43,21 @@ export function LoginScreen({ navigation }: any) {
 
         {error && <Text style={styles.error}>{error}</Text>}
 
-        <Button
-          mode="contained"
+        <TouchableOpacity
+          style={[styles.signInButton, isLoading && styles.disabled]}
           onPress={handleLogin}
-          loading={isLoading}
           disabled={isLoading || !email || !password}
-          style={styles.button}
         >
-          Sign In
-        </Button>
+          <Text style={styles.buttonText}>Sign In</Text>
+        </TouchableOpacity>
 
-        <Button
-          mode="text"
-          onPress={() => navigation.goBack()}
+        <TouchableOpacity
           style={styles.backButton}
+          onPress={() => navigation.goBack()}
+          disabled={isLoading}
         >
-          Back
-        </Button>
+          <Text style={styles.backButtonText}>Back</Text>
+        </TouchableOpacity>
       </View>
     </ScrollView>
   );
@@ -70,26 +66,53 @@ export function LoginScreen({ navigation }: any) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
+    backgroundColor: '#ffffff',
   },
   form: {
-    padding: 20,
+    padding: 24,
     justifyContent: 'center',
     minHeight: '100%',
   },
   title: {
-    marginBottom: 20,
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 24,
     textAlign: 'center',
   },
   input: {
     marginBottom: 12,
   },
-  button: {
-    marginTop: 16,
+  signInButton: {
     backgroundColor: '#008080',
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    borderRadius: 8,
+    marginTop: 24,
+    width: '100%',
+    alignItems: 'center',
+  },
+  buttonText: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
   backButton: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#008080',
     marginTop: 8,
+    width: '100%',
+    alignItems: 'center',
+  },
+  backButtonText: {
+    color: '#008080',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  disabled: {
+    opacity: 0.5,
   },
   error: {
     color: '#d32f2f',
