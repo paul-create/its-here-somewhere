@@ -19,18 +19,24 @@ export function AuthProvider({ children }: any) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://10.5.0.2:3000/api/auth/login', {
+      console.log('Attempting login with:', email);
+      const response = await fetch('http://192.168.1.146:3000/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
       });
       
+      console.log('Response status:', response.status);
       const data = await response.json();
+      console.log('Response data:', data);
+      
       if (!response.ok) throw new Error(data.message || 'Login failed');
       
       setToken(data.token);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed');
+      const errorMsg = err instanceof Error ? err.message : 'Login failed';
+      console.log('Login error:', errorMsg);
+      setError(errorMsg);
       throw err;
     } finally {
       setIsLoading(false);

@@ -114,20 +114,41 @@ Want to contribute or run it locally?
    ```bash
    node run-migration.js
    ```
+   
+## Development Troubleshooting
+1. Backend running: `npm start` (from root directory)
+2. Two PowerShell windows open:
+   - **Window 1 (Backend):** `cd ..\its-here-somewhere && npm start`
+   - **Window 2 (Mobile):** `cd ..\its-here-somewhere\mobile && npm start`
 
-6. **Start the backend**
-   ```bash
-   npm start
-   ```
+### Network Connection Issues
 
-The API runs on `http://localhost:3000`.
+**Problem:** Login fails with "Failed to connect to /192.168.1.x:3000"
 
-#### Running the Mobile App (when available)
+**Solutions:**
 
-```bash
-cd mobile
-npx expo start
+1. **Disable NordVPN on both devices**
+   - NordVPN blocks local network access (10.x.x.x and 192.x.x.x ranges)
+   - Disable on both laptop and Android phone while testing
+   - You can use split tunneling in NordVPN settings to whitelist local network, but easiest is just to turn it off during dev
+
+2. **Update IP address in AuthContext.tsx**
+   - IP addresses change depending on your network
+   - Run `ipconfig` on your laptop to find your current IPv4 (usually 192.168.x.x)
+   - Update `src/context/AuthContext.tsx` line with fetch URL:
+```typescriptreact
+     const response = await fetch('http://YOUR_IP:3000/api/auth/login', {
 ```
+   - **Don't forget the :3000 port number**
+
+3. **Verify both devices are on same WiFi**
+   - Laptop: Run `ipconfig` and check IPv4 and WiFi network name
+   - Phone: Settings > WiFi and verify same network
+   - Both should have similar IP ranges (e.g., 192.168.1.x)
+
+4. **Check backend is running**
+   - PowerShell window 1 should show: "Server running on port 3000"
+   - If not, run `npm start` in the root directory
 
 ---
 
