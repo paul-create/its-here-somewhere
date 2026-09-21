@@ -13,6 +13,8 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.4.0",
     "pg": "^8.23.0",
+    "react-native-safe-area-context": "^5.10.0",
+    "react-native-screens": "^4.28.0",
     "uuid": "^14.0.2"
   },
   "name": "its-here-somewhere",
