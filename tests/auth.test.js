@@ -1,10 +1,11 @@
-const { request, setToken, assert } = require('./helpers');
+const { request, setToken, assert, trackItem } = require('./helpers');
 
 async function runAuthTests() {
   console.log('Starting auth tests...\n');
   
   const testEmail = `test-${Date.now()}@example.com`;
   let token = null;
+  let userId = null;
 
   try {
     // 1. Signup
@@ -14,6 +15,8 @@ async function runAuthTests() {
       password: 'TestPass123!'
     });
     assert.strictEqual(signupRes.status, 201, 'Signup failed');
+    userId = signupRes.body.id;
+    trackItem('users', userId);  // TRACK IT
     console.log('✓ Signup successful\n');
 
     // 2. Login
@@ -35,7 +38,7 @@ async function runAuthTests() {
     console.log('✓ GET /me successful\n');
 
     console.log('Auth tests passed!');
-    return token; // Return token for other tests
+    return token;
   } catch (err) {
     console.error('Test failed:', err.message);
     process.exit(1);

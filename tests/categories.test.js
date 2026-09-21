@@ -1,4 +1,4 @@
-const { request, setToken, assert } = require('./helpers');
+const { request, setToken, assert, trackItem } = require('./helpers');
 
 async function runCategoryTests(token) {
   console.log('Starting category tests...\n');
@@ -16,6 +16,7 @@ async function runCategoryTests(token) {
     });
     assert.strictEqual(postRes.status, 201, `POST failed with status ${postRes.status}`);
     testCategoryId = postRes.body.id;
+    trackItem('categories', testCategoryId);  // TRACK IT
     console.log('✓ Created public category\n');
 
     // 2. POST category (private)
@@ -25,6 +26,7 @@ async function runCategoryTests(token) {
       is_private: true
     });
     assert.strictEqual(postPrivateRes.status, 201, 'POST failed');
+    trackItem('categories', postPrivateRes.body.id);  // TRACK IT
     console.log('✓ Created private category\n');
 
     // 3. GET categories
@@ -43,7 +45,7 @@ async function runCategoryTests(token) {
     assert.strictEqual(putRes.status, 200, `PUT failed`);
     console.log('✓ Updated category\n');
 
-    // 5. DELETE category
+    // 5. DELETE category (manual, don't track the deletion)
     console.log('5. Testing DELETE /api/categories/:id');
     const deleteCatRes = await request('POST', '/api/categories', {
       name: `Temp-${timestamp}`,

@@ -1,4 +1,4 @@
-const { request, setToken, assert } = require('./helpers');
+const { request, setToken, assert, trackItem } = require('./helpers');
 
 async function runItemLocationsTests(token) {
   console.log('Starting item locations tests...\n');
@@ -15,6 +15,7 @@ async function runItemLocationsTests(token) {
       is_private: false
     });
     const categoryId = catRes.body.id;
+    trackItem('categories', categoryId);  // TRACK IT
 
     // Setup: create item
     const itemRes = await request('POST', '/api/items', {
@@ -23,6 +24,7 @@ async function runItemLocationsTests(token) {
       quantity: 1
     });
     testItemId = itemRes.body.id;
+    trackItem('items', testItemId);  // TRACK IT
 
     // Setup: create location
     const locRes = await request('POST', '/api/locations', {
@@ -30,6 +32,7 @@ async function runItemLocationsTests(token) {
       is_private: false
     });
     testLocationId = locRes.body.id;
+    trackItem('locations', testLocationId);  // TRACK IT
 
     // 1. POST item to location
     console.log('1. Testing POST /api/items/:id/locations');
@@ -58,6 +61,7 @@ async function runItemLocationsTests(token) {
       is_private: false
     });
     const location2Id = loc2Res.body.id;
+    trackItem('locations', location2Id);  // TRACK IT
 
     const move2Res = await request('POST', `/api/items/${testItemId}/locations`, {
       location_id: location2Id

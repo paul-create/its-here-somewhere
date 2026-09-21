@@ -1,4 +1,4 @@
-const { request, setToken, assert } = require('./helpers');
+const { request, setToken, assert, trackItem } = require('./helpers');
 
 async function runLocationTests(token) {
   console.log('Starting location tests...\n');
@@ -16,6 +16,7 @@ async function runLocationTests(token) {
     });
     assert.strictEqual(postRes.status, 201, `POST failed with status ${postRes.status}`);
     testLocationId = postRes.body.id;
+    trackItem('locations', testLocationId);  // TRACK IT
     console.log('✓ Created public location\n');
 
     // 2. POST location (private)
@@ -25,6 +26,7 @@ async function runLocationTests(token) {
       is_private: true
     });
     assert.strictEqual(postPrivateRes.status, 201, 'POST failed');
+    trackItem('locations', postPrivateRes.body.id);  // TRACK IT
     console.log('✓ Created private location\n');
 
     // 3. GET locations

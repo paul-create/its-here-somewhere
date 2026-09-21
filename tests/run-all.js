@@ -5,7 +5,7 @@ const { runLocationTests } = require('./locations.test');
 const { runItemLocationsTests } = require('./item-locations.test');
 const { runPhotoTests, runPhotoUploadTest } = require('./photos.test');
 const { runSearchTests } = require('./search.test');
-const { cleanup } = require('./helpers');
+const { cleanup, resetTracker } = require('./helpers');
 
 const tests = {
   auth: { fn: runAuthTests, requiresAuth: false },
@@ -13,8 +13,7 @@ const tests = {
   items: { fn: runItemTests, requiresAuth: true },
   locations: { fn: runLocationTests, requiresAuth: true },
   'item-locations': { fn: runItemLocationsTests, requiresAuth: true },
-  photos: 
-  { 
+  photos: { 
     fn: async (token) => {
       try {
         await runPhotoTests(token);
@@ -37,11 +36,15 @@ async function runAll() {
     }
 
     let token = null;
+    const startTime = Date.now();
 
     // If any selected test requires auth, run auth first
     const needsAuth = selectedTests.some(name => tests[name]?.requiresAuth);
     if (needsAuth && !selectedTests.includes('auth')) {
+      console.log('\n--- Running Auth (required for other tests) ---\n');
       token = await tests.auth.fn();
+      await cleanup();
+      resetTracker();
     }
 
     // Run selected tests
@@ -52,19 +55,32 @@ async function runAll() {
         continue;
       }
 
-      if (test.requiresAuth && !token) {
-        token = await test.fn();
-      } else if (test.requiresAuth) {
-        await test.fn(token);
-      } else {
-        await test.fn();
+      resetTracker();
+      console.log(`\n--- Running ${testName} ---\n`);
+
+      try {
+        if (test.requiresAuth && !token) {
+          token = await test.fn();
+        } else if (test.requiresAuth) {
+          await test.fn(token);
+        } else {
+          await test.fn();
+        }
+        
+        // Cleanup after each test
+        await cleanup();
+      } catch (err) {
+        console.error(`Test ${testName} failed:`, err.message);
+        await cleanup();
+        throw err;
       }
     }
 
-    console.log('\nSelected tests passed!');
+    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
+    console.log(`\n✓ All tests passed in ${duration}s`);
     process.exit(0);
   } catch (err) {
-    console.error('Tests failed:', err);
+    console.error('Tests failed:', err.message);
     process.exit(1);
   }
 }

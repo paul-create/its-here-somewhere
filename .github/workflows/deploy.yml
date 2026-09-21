@@ -4,7 +4,39 @@ on:
   workflow_dispatch:  # Manual trigger only for now
 
 jobs:
+  deploy-db:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      
+      - name: Install PostgreSQL client and migra
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pip install migra
+      
+      - name: Run database deployment
+        env:
+          PROD_DB: ${{ secrets.PROD_DB }}
+        run: bash sql/scripts/deploy.sh
+      
+      - name: Commit migration audit trail
+        run: |
+          git config --local user.email "action@github.com"
+          git config --local user.name "GitHub Action"
+          if [ -f sql/scripts/migration_delta.sql ]; then
+            git add sql/scripts/migration_delta.sql
+            git commit -m "chore: DB migration audit trail from $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
+            git push
+          fi
+
   build:
+    needs: deploy-db
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -12,15 +44,28 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '20'  # Updated from 18
+          node-version: '20'
       
       - name: Install dependencies
         run: npm ci
       
-      - name: Run tests
-        run: node tests/run-all.js
-        env:
-          NODE_ENV: test
+      # ===== TESTS =====
+      # Tests require a running backend (API server).
+      # Local development: Run tests locally with `node tests/run-all.js`
+      #   - Backend must be running on localhost:3000
+      #   - Database must be accessible to backend
+      # GitHub Actions: Tests are SKIPPED until App Runner is deployed
+      #   - Tests will fail if trying to connect to 192.168.1.146:3000 (local dev machine)
+      # Once AWS App Runner is deployed and ready:
+      #   - Uncomment the test step below
+      #   - Set BACKEND_URL secret to App Runner URL (e.g., https://api-staging.its-here-somewhere.com)
+      # ===== END TESTS =====
+      
+      # - name: Run API tests
+      #   env:
+      #     BACKEND_URL: ${{ secrets.BACKEND_URL }}
+      #     NODE_ENV: test
+      #   run: node tests/run-all.js
       
       # TODO: Uncomment when App Runner is ready
       # - name: Build and push Docker image
