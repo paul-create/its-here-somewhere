@@ -1,8 +1,9 @@
 import React, { useState, useMemo } from 'react';
-import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator, RefreshControl } from 'react-native';
+import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { AppHeaderComponent } from '../components/AppHeaderComponent';
 
 interface Item {
   id: string;
@@ -24,10 +25,17 @@ interface Location {
   is_private: boolean;
 }
 
+interface Photo {
+  id: string;
+  item_id: string;
+  s3_url: string;
+}
+
 export function HomeScreen({ navigation }: any) {
   const [items, setItems] = useState<Item[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
+  const [photos, setPhotos] = useState<Photo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +52,7 @@ export function HomeScreen({ navigation }: any) {
     }
 
     try {
-      const [itemsResponse, categoriesResponse, locationsResponse] = await Promise.all([
+      const [itemsResponse, categoriesResponse, locationsResponse, photosResponse] = await Promise.all([
         fetch('http://192.168.1.146:3000/api/items', {
           method: 'GET',
           headers: {
@@ -65,6 +73,13 @@ export function HomeScreen({ navigation }: any) {
             'Content-Type': 'application/json',
             'Authorization': `Bearer ${token}`,
           },
+        }),
+        fetch('http://192.168.1.146:3000/api/photos', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
         })
       ]);
 
@@ -73,18 +88,19 @@ export function HomeScreen({ navigation }: any) {
       }
       
       const itemsData = await itemsResponse.json();
-      console.log('DEBUG: Items from API:', JSON.stringify(itemsData, null, 2)); // ADD THIS
-    
       const categoriesData = await categoriesResponse.json();
       const locationsData = await locationsResponse.json();
+      const photosData = photosResponse.ok ? await photosResponse.json() : [];
 
       const itemsArray = Array.isArray(itemsData) ? itemsData : (itemsData.items || []);
       const categoriesArray = Array.isArray(categoriesData) ? categoriesData : (categoriesData.categories || []);
       const locationsArray = Array.isArray(locationsData) ? locationsData : (locationsData.locations || []);
+      const photosArray = Array.isArray(photosData) ? photosData : (photosData.photos || []);
 
       setItems(itemsArray);
       setCategories(categoriesArray);
       setLocations(locationsArray);
+      setPhotos(photosArray);
       setCurrentPage(0);
       setError(null);
     } catch (err) {
@@ -109,6 +125,7 @@ export function HomeScreen({ navigation }: any) {
 
   const isItemPrivate = (item: Item): boolean => {
     const category = categories.find(c => c.id === item.category_id);
+    //console.log(`Item: ${item.name}, Category: ${category?.name}, is_private: ${category?.is_private}`);
     return category?.is_private || false;
   };
 
@@ -136,27 +153,46 @@ export function HomeScreen({ navigation }: any) {
     return location?.name || 'Unknown';
   };
 
-  const renderItem = ({ item }: any) => (
-  <TouchableOpacity style={styles.itemCard}>
-    <View style={styles.itemImagePlaceholder}>
-      <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
-    </View>
-    
-    <View style={styles.itemInfo}>
-      <Text style={styles.itemName}>{item.name}</Text>
-      <Text style={styles.itemCategory}>{getCategoryName(item.category_id)}</Text>
-      {item.location_id && (
-        <View style={styles.locationRow}>
-          <MaterialCommunityIcons name="map-marker" size={14} color="#008080" />
-          <Text style={styles.itemLocation}>{getLocationName(item.location_id)}</Text>
-        </View>
-      )}
-      {item.quantity && <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>}
-    </View>
+  const getPhotoUrl = (itemId: string): string | null => {
+    const photo = photos.find(p => p.item_id === itemId);
+    return photo?.s3_url || null;
+  };
 
-    <MaterialCommunityIcons name="chevron-right" size={24} color="#008080" />
-  </TouchableOpacity>
-);
+  const renderItem = ({ item }: any) => {
+    const photoUrl = getPhotoUrl(item.id);
+    
+    return (
+      <TouchableOpacity 
+        style={styles.itemCard}
+        onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
+      >
+        <View style={styles.itemImagePlaceholder}>
+          {photoUrl ? (
+            <Image 
+              source={{ uri: photoUrl }} 
+              style={styles.itemImage}
+            />
+          ) : (
+            <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
+          )}
+        </View>
+        
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{item.name}</Text>
+          <Text style={styles.itemCategory}>{getCategoryName(item.category_id)}</Text>
+          {item.location_id && (
+            <View style={styles.locationRow}>
+              <MaterialCommunityIcons name="map-marker" size={14} color="#008080" />
+              <Text style={styles.itemLocation}>{getLocationName(item.location_id)}</Text>
+            </View>
+          )}
+          {item.quantity && <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>}
+        </View>
+
+        <MaterialCommunityIcons name="chevron-right" size={24} color="#008080" />
+      </TouchableOpacity>
+    );
+  };
 
   if (isLoading) {
     return (
@@ -168,8 +204,9 @@ export function HomeScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <AppHeaderComponent />
       <View style={styles.header}>
-        <Text style={styles.title}>My Items</Text>
+        <Text style={styles.title}>Recently Added</Text>
         <View style={styles.headerButtons}>
           <TouchableOpacity onPress={handleRefresh} style={styles.refreshButton}>
             <MaterialCommunityIcons name="refresh" size={24} color="#008080" />
@@ -250,27 +287,41 @@ export function HomeScreen({ navigation }: any) {
 
                   {showPrivate && (
                     <View style={styles.privateItemsContainer}>
-                      {privateItems.map((item) => (
-                        <TouchableOpacity key={item.id} style={styles.itemCard}>
-                          <View style={styles.itemImagePlaceholder}>
-                            <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
-                          </View>
-                          
-                          <View style={styles.itemInfo}>
-                            <Text style={styles.itemName}>{item.name}</Text>
-                            <Text style={styles.itemCategoryPrivate}>{getCategoryName(item.category_id)}</Text>
-                            {item.location_id && (
-                              <View style={styles.locationRow}>
-                                <MaterialCommunityIcons name="map-marker" size={14} color="#d32f2f" />
-                                <Text style={[styles.itemLocation, { color: '#d32f2f' }]}>{getLocationName(item.location_id)}</Text>
-                              </View>
-                            )}
-                            {item.quantity && <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>}
-                          </View>
+                      {privateItems.filter(item => !publicItems.some(p => p.id === item.id)).map((item) => {
+                        const photoUrl = getPhotoUrl(item.id);
+                        return (
+                          <TouchableOpacity 
+                            key={item.id} 
+                            style={styles.itemCard}
+                            onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
+                          >
+                            <View style={styles.itemImagePlaceholder}>
+                              {photoUrl ? (
+                                <Image 
+                                  source={{ uri: photoUrl }} 
+                                  style={styles.itemImage}
+                                />
+                              ) : (
+                                <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
+                              )}
+                            </View>
+                            
+                            <View style={styles.itemInfo}>
+                              <Text style={styles.itemName}>{item.name}</Text>
+                              <Text style={styles.itemCategoryPrivate}>{getCategoryName(item.category_id)}</Text>
+                              {item.location_id && (
+                                <View style={styles.locationRow}>
+                                  <MaterialCommunityIcons name="map-marker" size={14} color="#d32f2f" />
+                                  <Text style={[styles.itemLocation, { color: '#d32f2f' }]}>{getLocationName(item.location_id)}</Text>
+                                </View>
+                              )}
+                              {item.quantity && <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>}
+                            </View>
 
-                          <MaterialCommunityIcons name="chevron-right" size={24} color="#d32f2f" />
-                        </TouchableOpacity>
-                      ))}
+                            <MaterialCommunityIcons name="chevron-right" size={24} color="#d32f2f" />
+                          </TouchableOpacity>
+                        );
+                      })}
                     </View>
                   )}
                 </View>
@@ -354,6 +405,12 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
+  },
+  itemImage: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
   },
   itemInfo: {
     flex: 1,
@@ -468,5 +525,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#008080',
     fontWeight: '400',
+  },
+  logo: {
+    width: '100%',
+    height: 100,
+    backgroundColor: '#ffffff',
+    paddingVertical: 8,
+  },
+    sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
   },
 });

@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator
 import { TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
+import { AppHeaderComponent } from '../components/AppHeaderComponent';
 
 export function AddCategoryScreen({ navigation }: any) {
   const [name, setName] = useState('');
@@ -48,6 +49,7 @@ export function AddCategoryScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} contentContainerStyle={styles.scrollContent}>
+      <AppHeaderComponent />
       <View style={styles.form}>
         <Text style={styles.title}>New Category</Text>
 

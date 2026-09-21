@@ -61,6 +61,19 @@ CREATE TABLE IF NOT EXISTS item_locations (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE activity_log (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  item_id UUID NOT NULL REFERENCES items(id),
+  changed_by UUID NOT NULL REFERENCES users(id),
+  changed_at TIMESTAMP DEFAULT NOW(),
+  property VARCHAR(50) NOT NULL, -- 'Location', 'Category', 'Photo', 'Name', 'Description', etc.
+  old_value TEXT,
+  new_value TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS idx_activity_log_item_id ON activity_log(item_id);
+CREATE INDEX IF NOT EXISTS idx_activity_log_changed_at ON activity_log(changed_at);
 CREATE INDEX IF NOT EXISTS idx_items_category_id ON items(category_id);
 CREATE INDEX IF NOT EXISTS idx_photos_item_id ON photos(item_id);
 CREATE INDEX IF NOT EXISTS idx_tags_photo_id ON tags(photo_id);

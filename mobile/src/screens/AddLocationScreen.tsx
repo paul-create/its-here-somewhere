@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from 'react-nati
 import { TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
+import { AppHeaderComponent } from '../components/AppHeaderComponent';
 
 export function AddLocationScreen({ navigation }: any) {
   const [name, setName] = useState('');
@@ -46,6 +47,7 @@ export function AddLocationScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <AppHeaderComponent />
       <View style={styles.form}>
         <Text style={styles.label}>Location name *</Text>
         <TextInput

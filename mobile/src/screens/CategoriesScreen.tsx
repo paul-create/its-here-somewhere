@@ -3,6 +3,7 @@ import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator }
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { AppHeaderComponent } from '../components/AppHeaderComponent';
 
 interface Category {
   id: string;
@@ -82,6 +83,7 @@ export function CategoriesScreen({ navigation }: any) {
 
   return (
     <View style={styles.container}>
+      <AppHeaderComponent />
       <View style={styles.header}>
         <Text style={styles.title}>Categories</Text>
         <TouchableOpacity

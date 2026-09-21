@@ -1,9 +1,14 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Modal, FlatList, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, ScrollView, TouchableOpacity, Text, Modal, FlatList, ActivityIndicator, Alert } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
+import { PhotoPickerComponent } from '../components/PhotoPickerComponent';
+import { PhotoPreviewComponent } from '../components/PhotoPreviewComponent';
+import { TagEditorComponent } from '../components/TagEditorComponent';
+import axios from 'axios';
+import { AppHeaderComponent } from '../components/AppHeaderComponent';
 
 interface Category {
   id: string;
@@ -17,6 +22,12 @@ interface Location {
   is_private: boolean;
 }
 
+interface Photo {
+  uri: string;
+  type: string;
+  name: string;
+}
+
 export function AddScreen({ navigation }: any) {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -24,6 +35,8 @@ export function AddScreen({ navigation }: any) {
   
   const [selectedCategory, setSelectedCategory] = useState<Category | null>(null);
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null);
+  const [selectedPhoto, setSelectedPhoto] = useState<Photo | null>(null);
+  const [photoTags, setPhotoTags] = useState<string[]>([]);
   
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
@@ -34,6 +47,7 @@ export function AddScreen({ navigation }: any) {
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingCategories, setIsLoadingCategories] = useState(false);
   const [isLoadingLocations, setIsLoadingLocations] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
   
   const { token } = useAuth();
 
@@ -49,6 +63,7 @@ export function AddScreen({ navigation }: any) {
       setCategories(categoriesArray);
     } catch (err) {
       console.error('Error loading categories:', err);
+      setError('Failed to load categories');
     } finally {
       setIsLoadingCategories(false);
     }
@@ -66,6 +81,7 @@ export function AddScreen({ navigation }: any) {
       setLocations(locationsArray);
     } catch (err) {
       console.error('Error loading locations:', err);
+      setError('Failed to load locations');
     } finally {
       setIsLoadingLocations(false);
     }
@@ -77,6 +93,40 @@ export function AddScreen({ navigation }: any) {
       fetchLocations();
     }, [token])
   );
+
+  const uploadPhotoAndGetTags = async (itemId: string): Promise<boolean> => {
+    if (!selectedPhoto || !token) return false;
+
+    try {
+      setIsUploading(true);
+
+      const formDataObj = new FormData();
+      formDataObj.append('file', {
+        uri: selectedPhoto.uri,
+        type: 'image/jpeg',
+        name: selectedPhoto.name,
+      } as any);
+
+      const photoRes = await axios.post(
+        `http://192.168.1.146:3000/api/photos?itemId=${itemId}`,
+        formDataObj,
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+          },
+        }
+      );
+
+      setPhotoTags(photoRes.data.tags || []);
+      return true;
+    } catch (err) {
+      console.error('Photo upload error:', err);
+      setError('Failed to upload photo');
+      return false;
+    } finally {
+      setIsUploading(false);
+    }
+  };
 
   const handleAddItem = async () => {
     if (!name.trim()) {
@@ -113,6 +163,26 @@ export function AddScreen({ navigation }: any) {
         throw new Error('Failed to create item');
       }
 
+      const itemData = await response.json();
+      const itemId = itemData.id;
+
+      // Upload photo if selected
+      if (selectedPhoto) {
+        const uploadSuccess = await uploadPhotoAndGetTags(itemId);
+        if (!uploadSuccess) {
+          return;
+        }
+      }
+
+      Alert.alert('Success', 'Item added successfully!');
+      setName('');
+      setDescription('');
+      setQuantity('1');
+      setSelectedCategory(null);
+      setSelectedLocation(null);
+      setSelectedPhoto(null);
+      setPhotoTags([]);
+      setError(null);
       navigation.goBack();
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Error creating item';
@@ -150,6 +220,10 @@ export function AddScreen({ navigation }: any) {
 
   return (
     <ScrollView style={styles.container} showsVerticalScrollIndicator={false}>
+      <AppHeaderComponent />
+      <View style={styles.header}>
+      <Text style={styles.title}>Add Item</Text>
+      </View>
       <View style={styles.form}>
         <Text style={styles.label}>Item name *</Text>
         <TextInput
@@ -170,10 +244,36 @@ export function AddScreen({ navigation }: any) {
           mode="outlined"
           outlineColor="#e0e0e0"
           activeOutlineColor="#008080"
-          multiline
-          numberOfLines={3}
           style={styles.input}
         />
+
+        {/* Photo Picker */}
+        {!selectedPhoto && (
+          <PhotoPickerComponent 
+            onPhotoSelected={setSelectedPhoto}
+            onLoading={setIsUploading}
+          />
+        )}
+
+        {/* Photo Preview */}
+        {selectedPhoto && (
+          <PhotoPreviewComponent
+            photoUri={selectedPhoto.uri}
+            onRetake={() => {
+              setSelectedPhoto(null);
+              setPhotoTags([]);
+            }}
+            isUploading={isUploading}
+          />
+        )}
+
+        {/* Tags Editor */}
+        {selectedPhoto && photoTags.length > 0 && (
+          <TagEditorComponent 
+            tags={photoTags}
+            onTagsChange={setPhotoTags}
+          />
+        )}
 
         <Text style={styles.label}>Quantity</Text>
         <TextInput
@@ -238,12 +338,12 @@ export function AddScreen({ navigation }: any) {
         )}
 
         <TouchableOpacity
-          style={[styles.addButton, isLoading && styles.buttonDisabled]}
+          style={[styles.addButton, (isLoading || isUploading) && styles.buttonDisabled]}
           onPress={handleAddItem}
-          disabled={isLoading}
+          disabled={isLoading || isUploading}
         >
           <Text style={styles.addButtonText}>
-            {isLoading ? 'Adding...' : 'Add Item'}
+            {isLoading ? 'Adding...' : isUploading ? 'Uploading photo...' : 'Add Item'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -263,6 +363,37 @@ export function AddScreen({ navigation }: any) {
             </View>
             {isLoadingCategories ? (
               <ActivityIndicator size="large" color="#008080" />
+            ) : categories.length === 0 ? (
+              <Text style={styles.emptyText}>No categories found</Text>
+            ) : (
+              <FlatList
+                data={categories}
+                renderItem={renderCategoryOption}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={true}
+              />
+            )}
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={showCategoryModal}
+        animationType="slide"
+        transparent={true}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Category</Text>
+              <TouchableOpacity onPress={() => setShowCategoryModal(false)}>
+                <MaterialCommunityIcons name="close" size={24} color="#333333" />
+              </TouchableOpacity>
+            </View>
+            {isLoadingCategories ? (
+              <ActivityIndicator size="large" color="#008080" />
+            ) : categories.length === 0 ? (
+              <Text style={styles.emptyText}>No categories found</Text>
             ) : (
               <FlatList
                 data={categories}
@@ -290,6 +421,8 @@ export function AddScreen({ navigation }: any) {
             </View>
             {isLoadingLocations ? (
               <ActivityIndicator size="large" color="#008080" />
+            ) : locations.length === 0 ? (
+              <Text style={styles.emptyText}>No locations found</Text>
             ) : (
               <FlatList
                 data={locations}
@@ -444,5 +577,24 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#d32f2f',
     fontWeight: '500',
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999999',
+    textAlign: 'center',
+    paddingVertical: 20,
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '600',
   },
 });

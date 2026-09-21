@@ -9,6 +9,7 @@ import { BottomTabNavigator } from './src/navigation/BottomTabNavigator';
 import { AddScreen } from './src/screens/AddScreen';
 import { AddCategoryScreen } from './src/screens/AddCategoryScreen';
 import { AddLocationScreen } from './src/screens/AddLocationScreen';
+import { ItemDetailsScreen } from './src/screens/ItemDetailsScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -24,6 +25,9 @@ export default function App() {
           <Stack.Screen name="AddCategory" component={AddCategoryScreen} />
           <Stack.Screen name="AddLocation" component={AddLocationScreen} />
           <Stack.Screen name="Main" component={BottomTabNavigator} />
+          <Stack.Group screenOptions={{ presentation: 'modal' }}>
+            <Stack.Screen name="ItemDetails" component={ItemDetailsScreen} />
+          </Stack.Group>
         </Stack.Navigator>
       </NavigationContainer>
     </AuthProvider>
