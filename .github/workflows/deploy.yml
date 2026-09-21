@@ -23,7 +23,7 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
-          pip install migra
+          pip install migra psycopg2-binary
       
       - name: Run database deployment
         env:
