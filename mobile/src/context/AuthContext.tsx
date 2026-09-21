@@ -30,7 +30,13 @@ export function AuthProvider({ children }: any) {
       const data = await response.json();
       console.log('Response data:', data);
       
-      if (!response.ok) throw new Error(data.message || 'Login failed');
+      if (!response.ok) {
+        // Friendly error messages
+        if (response.status === 401) {
+          throw new Error('Hmm, that didn\'t work. Double-check your email and password?');
+        }
+        throw new Error(data.message || 'Login failed');
+      }
       
       setToken(data.token);
     } catch (err) {
