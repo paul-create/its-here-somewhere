@@ -1,11 +1,25 @@
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import { useAuth } from '../context/AuthContext';
 
-export function MoreScreen() {
+export function MoreScreen({ navigation }: any) {
+  const { logout } = useAuth();
+
+  const handleLogout = () => {
+    logout();
+    navigation.replace('Welcome');
+  };
+
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>More</Text>
-      <Text style={styles.subtitle}>Settings & Logout</Text>
+      <Text style={styles.title}>Settings</Text>
+
+      <TouchableOpacity 
+        style={styles.logoutButton}
+        onPress={handleLogout}
+      >
+        <Text style={styles.logoutText}>Log Out</Text>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -14,18 +28,26 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#ffffff',
-    padding: 16,
-    justifyContent: 'center',
-    alignItems: 'center',
+    padding: 24,
   },
   title: {
-    fontSize: 28,
-    fontWeight: 'bold',
-    color: '#008080', // teal
-    marginBottom: 8,
+    fontSize: 24,
+    fontWeight: '600',
+    marginBottom: 24,
   },
-  subtitle: {
+  logoutButton: {
+    paddingHorizontal: 48,
+    paddingVertical: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#d32f2f',
+    marginTop: 16,
+    width: '100%',
+    alignItems: 'center',
+  },
+  logoutText: {
+    color: '#d32f2f',
     fontSize: 16,
-    color: '#666666',
+    fontWeight: '600',
   },
 });
