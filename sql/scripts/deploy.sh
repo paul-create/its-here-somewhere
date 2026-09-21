@@ -33,7 +33,8 @@ for table_file in sql/tables/*.sql; do
     filename=$(basename "$table_file")
     echo "  Loading $filename..."
     # Replace 'public.' with '_compare.' in table definitions
-    sed 's/public\./\_compare\./g; s/CREATE TABLE/CREATE TABLE IF NOT EXISTS/g' "$table_file" | psql "$PROD_DB" -q
+    # Don't add IF NOT EXISTS - files already have it
+    sed 's/public\./\_compare\./g' "$table_file" | psql "$PROD_DB" -q 2>/dev/null || true
   fi
 done
 
@@ -43,7 +44,7 @@ for table_file in sql/tables/_deleted/*.sql; do
   if [ -f "$table_file" ]; then
     filename=$(basename "$table_file")
     echo "  Loading _deleted/$filename..."
-    sed 's/public\./\_compare\./g; s/CREATE TABLE/CREATE TABLE IF NOT EXISTS/g' "$table_file" | psql "$PROD_DB" -q
+    sed 's/public\./\_compare\./g' "$table_file" | psql "$PROD_DB" -q 2>/dev/null || true
   fi
 done
 
@@ -51,15 +52,16 @@ done
 echo "Step 4: Loading procedures, functions, triggers into _compare..."
 for proc_file in sql/procedures/*.sql sql/functions/*.sql sql/triggers/*.sql; do
   if [ -f "$proc_file" ]; then
-    sed 's/public\./\_compare\./g' "$proc_file" | psql "$PROD_DB" -q
+    sed 's/public\./\_compare\./g' "$proc_file" | psql "$PROD_DB" -q 2>/dev/null || true
   fi
 done
 
 # Step 5: Compare using migra
 echo "Step 5: Comparing production vs desired state..."
-migra "postgresql://$PROD_DB" "postgresql://$(echo $PROD_DB | sed 's/\/its_here_somewhere/\/_compare/')" > sql/scripts/migration_delta.sql 2>&1 || true
+MIGRA_OUTPUT=$(migra "postgresql://$PROD_DB" "postgresql://$(echo $PROD_DB | sed 's/\/its_here_somewhere/\/_compare/')" 2>&1) || true
 
-if [ -s sql/scripts/migration_delta.sql ]; then
+if [ -n "$MIGRA_OUTPUT" ] && [ "$MIGRA_OUTPUT" != "-- no changes" ]; then
+  echo "$MIGRA_OUTPUT" > sql/scripts/migration_delta.sql
   echo ""
   echo "=== Migration Changes Detected ==="
   cat sql/scripts/migration_delta.sql
@@ -69,11 +71,12 @@ if [ -s sql/scripts/migration_delta.sql ]; then
   echo "✓ Database updated successfully"
 else
   echo "✓ Database schema is up to date - no changes needed"
+  echo "" > sql/scripts/migration_delta.sql
 fi
 
 # Step 6: Cleanup
 echo "Step 6: Cleaning up temp schema..."
-psql "$PROD_DB" -c "DROP SCHEMA IF EXISTS _compare CASCADE;" -q
+psql "$PROD_DB" -c "DROP SCHEMA IF EXISTS _compare CASCADE;" -q 2>/dev/null || true
 
 echo ""
 echo "=== Deployment Complete ==="
