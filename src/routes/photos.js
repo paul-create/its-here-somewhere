@@ -70,9 +70,8 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
 router.get('/', authMiddleware, async (req, res) => {
   try {
     const userId = req.user.id;
-    //console.log('Fetching photos for user:', userId);
 
-    // Get all photos for items created by this user
+    // Get all photos for items the user can see (public items + own private items)
     const result = await pool.query(`
       SELECT 
         p.id,
@@ -83,17 +82,15 @@ router.get('/', authMiddleware, async (req, res) => {
       FROM photos p
       LEFT JOIN tags t ON p.id = t.photo_id
       INNER JOIN items i ON p.item_id = i.id
-      WHERE i.created_by = $1
+      INNER JOIN categories c ON i.category_id = c.id
+      WHERE c.is_private = false OR i.created_by = $1
       GROUP BY p.id, p.item_id, p.s3_key, p.created_at
       ORDER BY p.created_at DESC
     `, [userId]);
 
-    //console.log('Found photos:', result.rows.length);
-
-    // Generate signed URLs for each photo (valid for 1 hour)
+    // Generate signed URLs for each photo
     const photos = await Promise.all(result.rows.map(async (row) => {
       const signedUrl = await getSignedPhotoUrl(row.s3_key, 3600);
-      //console.log(`Photo for item ${row.item_id}: signed URL generated`);
       return {
         id: row.id,
         item_id: row.item_id,

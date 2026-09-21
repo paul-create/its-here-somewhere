@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -114,9 +114,18 @@ export function HomeScreen({ navigation }: any) {
 
   useFocusEffect(
     React.useCallback(() => {
-      fetchItemsAndData();
+      if (token) {
+        fetchItemsAndData();
+      }
     }, [token])
   );
+
+  // Also add this for first load
+  useEffect(() => {
+    if (token) {
+      fetchItemsAndData();
+    }
+  }, [token]);
 
   const handleRefresh = () => {
     setRefreshing(true);
