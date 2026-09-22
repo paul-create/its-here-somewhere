@@ -1,1 +1,0 @@
--- ERROR: destructive statements generated. Use the --unsafe flag to suppress this error.
