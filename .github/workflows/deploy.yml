@@ -10,10 +10,8 @@ on:
       - '.github/workflows/deploy.yml'
 
 jobs:
-  deploy-db:
+  generate-plan:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - uses: actions/checkout@v4
       
@@ -22,63 +20,48 @@ jobs:
         with:
           python-version: '3.11'
       
-      - name: Install PostgreSQL client and migra
+      - name: Install tools
         run: |
           sudo apt-get update
           sudo apt-get install -y postgresql-client
           pip install migra psycopg2-binary
       
-      - name: Run database deployment
+      - name: Generate migration plan
         env:
           PROD_DB: ${{ secrets.PROD_DB }}
         run: bash sql/scripts/deploy.sh
-      
-      - name: Commit migration audit trail
-        run: |
-          git config --local user.email "action@github.com"
-          git config --local user.name "GitHub Action"
-          if [ -f sql/scripts/migration_delta.sql ]; then
-            git add sql/scripts/migration_delta.sql
-            git commit -m "chore: DB migration audit trail from $(date -u +'%Y-%m-%d %H:%M:%S UTC')"
-            git push
-          fi
 
-  build:
-    needs: deploy-db
+  apply-migration:
+    needs: generate-plan
     runs-on: ubuntu-latest
+    environment: production
     steps:
       - uses: actions/checkout@v4
       
-      - name: Set up Node.js
-        uses: actions/setup-node@v4
+      - name: Set up Python
+        uses: actions/setup-python@v4
         with:
-          node-version: '20'
+          python-version: '3.11'
       
-      - name: Install dependencies
-        run: npm ci
+      - name: Install PostgreSQL client
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          pip install psycopg2-binary
       
-      # ===== TESTS =====
-      # Tests require a running backend (API server).
-      # Local development: Run tests locally with `node tests/run-all.js`
-      #   - Backend must be running on localhost:3000
-      #   - Database must be accessible to backend
-      # GitHub Actions: Tests are SKIPPED until App Runner is deployed
-      #   - Tests will fail if trying to connect to 192.168.1.146:3000 (local dev machine)
-      # Once AWS App Runner is deployed and ready:
-      #   - Uncomment the test step below
-      #   - Set BACKEND_URL secret to App Runner URL (e.g., https://api-staging.its-here-somewhere.com)
-      # ===== END TESTS =====
-      
-      # - name: Run API tests
-      #   env:
-      #     BACKEND_URL: ${{ secrets.BACKEND_URL }}
-      #     NODE_ENV: test
-      #   run: node tests/run-all.js
-      
-      # TODO: Uncomment when App Runner is ready
-      # - name: Build and push Docker image
-      #   run: |
-      #     aws ecr get-login-password --region eu-west-2 | docker login --username AWS --password-stdin $AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com
-      #     docker build -t its-here-somewhere .
-      #     docker tag its-here-somewhere:latest $AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/its-here-somewhere:latest
-      #     docker push $AWS_ACCOUNT_ID.dkr.ecr.eu-west-2.amazonaws.com/its-here-somewhere:latest
+      - name: Apply migration
+        env:
+          PROD_DB: ${{ secrets.PROD_DB }}
+        run: |
+          if [ -f sql/scripts/migration_delta.sql ] && [ -s sql/scripts/migration_delta.sql ]; then
+            echo "=== Applying Migration ==="
+            echo ""
+            echo "SQL to be applied:"
+            cat sql/scripts/migration_delta.sql
+            echo ""
+            echo "Running migration..."
+            psql "$PROD_DB" -f sql/scripts/migration_delta.sql -q
+            echo "✓ Migration applied successfully"
+          else
+            echo "✓ No migration needed - schema is up to date"
+          fi
