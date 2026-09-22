@@ -1,133 +1,138 @@
 const express = require('express');
-const router = express.Router();
-const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { requireHome } = require('../middleware/auth');
+const { callReadProc, callWriteProc } = require('../utils/procedures');
+const { isUuid, sendProcError } = require('../utils/routeHelpers');
 
-// POST /api/locations
-router.post('/', authMiddleware, async (req, res) => {
+const router = express.Router();
+
+const MAX_NAME_LENGTH = 255; // matches locations.name VARCHAR(255)
+
+// Single location the current user is allowed to see, or null
+async function getVisibleLocation(req, locationId) {
+  const rows = await callReadProc('sp_getLocationByID', [locationId, req.user.home_id, req.user.id]);
+  return rows[0] || null;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/locations (all visible locations, A-Z - small list, used by pickers)
+// ---------------------------------------------------------------------------
+router.get('/', authMiddleware, requireHome, async (req, res) => {
+  try {
+    const rows = await callReadProc('sp_getAllLocations', [req.user.home_id, req.user.id]);
+    res.json(rows);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch locations' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// POST /api/locations (create - privacy is set here and can't change later)
+// ---------------------------------------------------------------------------
+router.post('/', authMiddleware, requireHome, async (req, res) => {
   try {
     const { name, parent_location_id, is_private } = req.body;
 
-    if (!name || !name.trim()) {
+    if (typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'Location name is required' });
     }
-
-    // If parent_location_id provided, verify it exists
-    if (parent_location_id) {
-      const parentCheck = await pool.query(
-        'SELECT id FROM locations WHERE id = $1',
-        [parent_location_id]
-      );
-
-      if (parentCheck.rows.length === 0) {
-        return res.status(404).json({ error: 'Parent location not found' });
-      }
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      return res.status(400).json({ error: `Location name must be ${MAX_NAME_LENGTH} characters or fewer` });
+    }
+    if (parent_location_id !== undefined && parent_location_id !== null && !isUuid(parent_location_id)) {
+      return res.status(400).json({ error: 'Invalid parent_location_id' });
+    }
+    if (is_private !== undefined && typeof is_private !== 'boolean') {
+      return res.status(400).json({ error: 'is_private must be true or false' });
     }
 
-    // Circular reference check
-    if (parent_location_id === 'same-id') {
-      return res.status(400).json({ error: 'Cannot be own parent' });
-    }
+    const result = await callWriteProc('sp_createLocation', [
+      req.user.home_id,
+      name.trim(),
+      parent_location_id || null,
+      is_private === true,
+      req.user.id
+    ], 3);
 
-    const result = await pool.query(
-      'INSERT INTO locations (name, parent_location_id, created_by, is_private) VALUES ($1, $2, $3, $4) RETURNING id, name, parent_location_id, created_by, is_private, created_at',
-      [name.trim(), parent_location_id || null, req.user.id, is_private || false]
-    );
+    if (result.p_error_code) return sendProcError(res, result);
 
-    res.status(201).json(result.rows[0]);
+    const location = await getVisibleLocation(req, result.p_location_id);
+    res.status(201).json(location);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to create location' });
   }
 });
 
-// GET /api/locations
-router.get('/', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// PUT /api/locations/:id (rename and/or change parent - creator only)
+//   parent_location_id: omitted = unchanged, null = top level, id = new parent
+// ---------------------------------------------------------------------------
+router.put('/:id', authMiddleware, requireHome, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT id, name, parent_location_id, created_by, is_private, created_at
-      FROM locations
-      WHERE (is_private = false) OR (created_by = $1)
-      ORDER BY name
-    `, [req.user.id]);
-    
-    res.json(result.rows);
+    const { id } = req.params;
+    const { name, parent_location_id, is_private } = req.body;
+    const updateParent = parent_location_id !== undefined;
+
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid location id' });
+    }
+    if (is_private !== undefined) {
+      return res.status(400).json({
+        error: 'Privacy can\'t be changed after a location is created. Create a new location instead.'
+      });
+    }
+    if (name === undefined && !updateParent) {
+      return res.status(400).json({ error: 'Nothing to update' });
+    }
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return res.status(400).json({ error: 'Location name cannot be empty' });
+    }
+    if (typeof name === 'string' && name.trim().length > MAX_NAME_LENGTH) {
+      return res.status(400).json({ error: `Location name must be ${MAX_NAME_LENGTH} characters or fewer` });
+    }
+    if (updateParent && parent_location_id !== null && !isUuid(parent_location_id)) {
+      return res.status(400).json({ error: 'Invalid parent_location_id' });
+    }
+
+    const result = await callWriteProc('sp_updateLocation', [
+      id,
+      req.user.home_id,
+      req.user.id,
+      typeof name === 'string' ? name.trim() : null,
+      updateParent,
+      updateParent ? parent_location_id : null
+    ]);
+
+    if (result.p_error_code) return sendProcError(res, result);
+
+    const location = await getVisibleLocation(req, id);
+    res.json(location);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to update location' });
   }
 });
 
-// PUT /api/locations/:id
-router.put('/:id', authMiddleware, async (req, res) => {
-  const { name, parent_location_id, is_private } = req.body;
-  const { id } = req.params;
-  
+// ---------------------------------------------------------------------------
+// DELETE /api/locations/:id (soft delete - creator only, must be unused)
+// ---------------------------------------------------------------------------
+router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
   try {
-    // Check ownership/privacy
-    const check = await pool.query(
-      'SELECT created_by, is_private FROM locations WHERE id = $1',
-      [id]
-    );
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Location not found' });
+    const { id } = req.params;
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid location id' });
     }
-    
-    const location = check.rows[0];
-    if (location.is_private && location.created_by !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorised' });
-    }
-    
-    // Circular reference check
-    if (parent_location_id === id) {
-      return res.status(400).json({ error: 'Cannot be own parent' });
-    }
-    
-    const result = await pool.query(
-      'UPDATE locations SET name = $1, parent_location_id = $2, is_private = $3 WHERE id = $4 RETURNING *',
-      [name || location.name, parent_location_id || null, is_private !== undefined ? is_private : location.is_private, id]
-    );
-    
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
 
-// DELETE /api/locations/:id
-router.delete('/:id', authMiddleware, async (req, res) => {
-  const { id } = req.params;
-  
-  try {
-    // Check ownership/privacy
-    const check = await pool.query(
-      'SELECT created_by, is_private FROM locations WHERE id = $1',
-      [id]
-    );
-    if (check.rows.length === 0) {
-      return res.status(404).json({ error: 'Location not found' });
-    }
-    
-    const location = check.rows[0];
-    if (location.is_private && location.created_by !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorised' });
-    }
-    
-    // Check if location has items
-    const itemCheck = await pool.query(
-      'SELECT COUNT(*) as count FROM item_locations WHERE location_id = $1',
-      [id]
-    );
-    if (itemCheck.rows[0].count > 0) {
-      return res.status(400).json({ error: 'Location has items, cannot delete' });
-    }
-    
-    await pool.query('DELETE FROM locations WHERE id = $1', [id]);
-    res.json({ success: true });
+    const result = await callWriteProc('sp_softDeleteLocation', [id, req.user.home_id, req.user.id]);
+
+    if (result.p_error_code) return sendProcError(res, result);
+
+    res.json({ message: result.p_message });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to delete location' });
   }
 });
 

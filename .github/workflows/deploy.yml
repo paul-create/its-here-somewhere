@@ -1,10 +1,17 @@
-name: Deploy Database Migrations
+name: Deploy Database
 
 on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: ['sql/scripts/migration/manual/*.sql', 'tests/**', '.github/workflows/deploy.yml']
+    paths:
+      - 'sql/**'
+      - '.github/workflows/deploy.yml'
+
+# Never run two database deploys at the same time
+concurrency:
+  group: database-deploy
+  cancel-in-progress: false
 
 jobs:
   # ============================================================================
@@ -31,22 +38,17 @@ jobs:
   #         BACKEND_URL: ${{ secrets.BACKEND_URL_TEST }}
   #       run: npm test
 
-  run-migrations:
+  deploy-database:
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-
       - name: Install PostgreSQL client
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
-      - name: Run database migrations
+      - name: Deploy database (pre-deploy, objects, post-deploy)
         env:
           PROD_DB: ${{ secrets.PROD_DB }}
         run: bash sql/scripts/deploy.sh
@@ -56,8 +58,8 @@ jobs:
         run: |
           git config user.name "GitHub Actions"
           git config user.email "actions@github.com"
-          git add sql/scripts/migration/archive/
-          git diff --cached --quiet || git commit -m "Archive migrations after successful deployment"
+          git add sql/scripts/migration/
+          git diff --cached --quiet || git commit -m "Archive migrations after deployment [skip ci]"
           git push
 
   # ============================================================================
@@ -65,7 +67,7 @@ jobs:
   # Uncomment this section once AWS App Runner approval is received
   # ============================================================================
   # deploy-app-runner:
-  #   needs: run-migrations
+  #   needs: deploy-database
   #   runs-on: ubuntu-latest
   #   permissions:
   #     contents: read
