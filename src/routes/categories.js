@@ -1,121 +1,124 @@
 const express = require('express');
-const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { requireHome } = require('../middleware/auth');
+const { callReadProc, callWriteProc } = require('../utils/procedures');
+const { isUuid, sendProcError } = require('../utils/routeHelpers');
 
 const router = express.Router();
 
-// GET /api/categories
-router.get('/', authMiddleware, async (req, res) => {
+const MAX_NAME_LENGTH = 100; // matches categories.name VARCHAR(100)
+
+// Single category the current user is allowed to see, or null
+async function getVisibleCategory(req, categoryId) {
+  const rows = await callReadProc('sp_getCategoryByID', [categoryId, req.user.home_id, req.user.id]);
+  return rows[0] || null;
+}
+
+// ---------------------------------------------------------------------------
+// GET /api/categories (all visible categories, A-Z - small list, used by pickers)
+// ---------------------------------------------------------------------------
+router.get('/', authMiddleware, requireHome, async (req, res) => {
   try {
-    const result = await pool.query(`
-      SELECT id, name, created_by, is_private, created_at
-      FROM categories
-      WHERE (is_private = false) OR (created_by = $1)
-      ORDER BY name
-    `, [req.user.id]);
-    
-    res.json(result.rows);
+    const rows = await callReadProc('sp_getAllCategories', [req.user.home_id, req.user.id]);
+    res.json(rows);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: 'Failed to fetch categories' });
   }
 });
 
-// POST /api/categories
-router.post('/', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// POST /api/categories (create - privacy is set here and can't change later)
+// ---------------------------------------------------------------------------
+router.post('/', authMiddleware, requireHome, async (req, res) => {
   try {
     const { name, is_private } = req.body;
 
-    if (!name || !name.trim()) {
+    if (typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'Category name is required' });
     }
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      return res.status(400).json({ error: `Category name must be ${MAX_NAME_LENGTH} characters or fewer` });
+    }
+    if (is_private !== undefined && typeof is_private !== 'boolean') {
+      return res.status(400).json({ error: 'is_private must be true or false' });
+    }
 
-    const result = await pool.query(
-      'INSERT INTO categories (name, created_by, is_private) VALUES ($1, $2, $3) RETURNING id, name, created_by, is_private, created_at',
-      [name.trim(), req.user.id, is_private || false]
-    );
+    const result = await callWriteProc('sp_createCategory', [
+      req.user.home_id,
+      name.trim(),
+      is_private === true,
+      req.user.id
+    ], 3);
 
-    res.status(201).json(result.rows[0]);
+    if (result.p_error_code) return sendProcError(res, result);
+
+    const category = await getVisibleCategory(req, result.p_category_id);
+    res.status(201).json(category);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to create category' });
   }
 });
 
-// PUT /api/categories/:id
-router.put('/:id', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// PUT /api/categories/:id (rename - creator only; privacy is fixed at creation)
+// ---------------------------------------------------------------------------
+router.put('/:id', authMiddleware, requireHome, async (req, res) => {
   try {
     const { id } = req.params;
     const { name, is_private } = req.body;
 
-    if (!name || !name.trim()) {
-      return res.status(400).json({ error: 'Category name is required' });
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid category id' });
     }
-
-    // Check ownership
-    const checkResult = await pool.query(
-      'SELECT id, created_by FROM categories WHERE id = $1',
-      [id]
-    );
-
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-
-    if (checkResult.rows[0].created_by !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorised' });
-    }
-
-    // Update it
-    const result = await pool.query(
-      'UPDATE categories SET name = $1, is_private = $2 WHERE id = $3 RETURNING id, name, created_by, is_private, created_at',
-      [name.trim(), is_private !== undefined ? is_private : false, id]
-    );
-
-    res.json(result.rows[0]);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// DELETE /api/categories/:id
-router.delete('/:id', authMiddleware, async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // Check ownership
-    const checkResult = await pool.query(
-      'SELECT created_by FROM categories WHERE id = $1',
-      [id]
-    );
-
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Category not found' });
-    }
-
-    if (checkResult.rows[0].created_by !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorised' });
-    }
-
-    // Check if any items use this category
-    const itemsResult = await pool.query(
-      'SELECT COUNT(*) as count FROM items WHERE category_id = $1',
-      [id]
-    );
-
-    if (itemsResult.rows[0].count > 0) {
-      return res.status(400).json({ 
-        error: `Cannot delete category - ${itemsResult.rows[0].count} item(s) still use it` 
+    if (is_private !== undefined) {
+      return res.status(400).json({
+        error: 'Privacy can\'t be changed after a category is created. Create a new category instead.'
       });
     }
+    if (typeof name !== 'string' || !name.trim()) {
+      return res.status(400).json({ error: 'Category name is required' });
+    }
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      return res.status(400).json({ error: `Category name must be ${MAX_NAME_LENGTH} characters or fewer` });
+    }
 
-    // Delete it
-    await pool.query('DELETE FROM categories WHERE id = $1', [id]);
+    const result = await callWriteProc('sp_updateCategory', [
+      id,
+      req.user.home_id,
+      req.user.id,
+      name.trim()
+    ]);
 
-    res.json({ message: 'Category deleted' });
+    if (result.p_error_code) return sendProcError(res, result);
+
+    const category = await getVisibleCategory(req, id);
+    res.json(category);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to update category' });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// DELETE /api/categories/:id (soft delete - creator only, must be unused)
+// ---------------------------------------------------------------------------
+router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
+  try {
+    const { id } = req.params;
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid category id' });
+    }
+
+    const result = await callWriteProc('sp_softDeleteCategory', [id, req.user.home_id, req.user.id]);
+
+    if (result.p_error_code) return sendProcError(res, result);
+
+    res.json({ message: result.p_message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete category' });
   }
 });
 

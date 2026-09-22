@@ -16,9 +16,9 @@ const authMiddleware = async (req, res, next) => {
       return res.status(401).json({ error: 'Invalid token' });
     }
 
-    // Look up database user ID from Cognito user ID
+    // Look up database user ID and home ID from Cognito user ID
     const result = await pool.query(
-      'SELECT id FROM users WHERE cognito_user_id = $1',
+      'SELECT id, home_id FROM users WHERE cognito_user_id = $1',
       [decoded.sub]
     );
 
@@ -27,9 +27,10 @@ const authMiddleware = async (req, res, next) => {
     }
 
     req.user = {
+      ...decoded,
       sub: decoded.sub,
       id: result.rows[0].id,
-      ...decoded
+      home_id: result.rows[0].home_id
     };
     next();
   } catch (err) {
@@ -38,4 +39,12 @@ const authMiddleware = async (req, res, next) => {
   }
 };
 
+const requireHome = (req, res, next) => {
+  if (!req.user?.home_id) {
+    return res.status(403).json({ error: 'No home set up', code: 'NO_HOME' });
+  }
+  next();
+};
+
 module.exports = authMiddleware;
+module.exports.requireHome = requireHome;

@@ -1,46 +1,22 @@
-CREATE OR REPLACE PROCEDURE sp_softDeleteCategory(
-  p_category_id UUID,
-  p_home_id UUID,
-  p_user_id UUID,
-  OUT p_success BOOLEAN,
-  OUT p_message VARCHAR
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_category categories;
-  v_item_count INTEGER;
-BEGIN
-  -- Check ownership
-  SELECT * INTO v_category FROM categories WHERE id = p_category_id AND home_id = p_home_id AND created_by = p_user_id;
-  
-  IF v_category IS NULL THEN
-    p_success := FALSE;
-    p_message := 'Category not found or not authorised';
-    RETURN;
-  END IF;
+-- Migration: Category procedures and audit trigger
+-- Date: 2026-09-22
+-- Purpose:
+--   1. Drop category write procs whose parameters / OUT parameters changed
+--      (p_success -> p_error_code; sp_updateCategory no longer takes p_is_private),
+--      so the normal deploy can recreate them.
+--   2. Remove tr_audit_categories. It inserts into activity_log without item_id,
+--      which is NOT NULL, so every category rename currently fails.
+--      activity_log is per item, so there is nowhere valid for it to write.
+-- Run BEFORE ./sql/scripts/deploy.sh, and delete sql/triggers/tr_audit_categories.sql
+-- from the repo so the deploy doesn't recreate it.
 
-  -- Check if items use this category
-  SELECT COUNT(*) INTO v_item_count FROM items WHERE category_id = p_category_id;
-  
-  IF v_item_count > 0 THEN
-    p_success := FALSE;
-    p_message := FORMAT('Cannot delete category - %s item(s) still use it', v_item_count);
-    RETURN;
-  END IF;
+BEGIN;
 
-  -- Insert into deleted table
-  INSERT INTO _deleted.categories_deleted (id, home_id, name, created_by, is_private, deleted_by, original_created_at, original_updated_at)
-  VALUES (v_category.id, v_category.home_id, v_category.name, v_category.created_by, v_category.is_private, p_user_id, v_category.created_at, v_category.updated_at);
+DROP PROCEDURE IF EXISTS sp_createcategory;
+DROP PROCEDURE IF EXISTS sp_updatecategory;
+DROP PROCEDURE IF EXISTS sp_softdeletecategory;
 
-  -- Delete
-  DELETE FROM categories WHERE id = p_category_id;
+DROP TRIGGER IF EXISTS tr_audit_categories ON categories;
+DROP FUNCTION IF EXISTS fn_audit_categories();
 
-  p_success := TRUE;
-  p_message := 'Category deleted';
-  COMMIT;
-EXCEPTION WHEN OTHERS THEN
-  p_success := FALSE;
-  p_message := SQLERRM;
-END;
-$$;
+COMMIT;

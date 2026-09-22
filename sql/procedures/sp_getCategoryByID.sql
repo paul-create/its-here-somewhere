@@ -8,10 +8,15 @@ LANGUAGE plpgsql
 AS $$
 BEGIN
   OPEN result FOR
-  SELECT id, name, created_by, is_private, created_at
+  SELECT
+    id,
+    name,
+    created_by,
+    COALESCE(is_private, false) AS is_private,
+    created_at
   FROM categories
-  WHERE id = p_category_id 
+  WHERE id = p_category_id
     AND home_id = p_home_id
-    AND ((is_private = false) OR (created_by = p_user_id));
+    AND (COALESCE(is_private, false) = false OR created_by = p_user_id);
 END;
 $$;

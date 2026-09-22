@@ -2,19 +2,16 @@ const express = require('express');
 const authMiddleware = require('../middleware/auth');
 const { requireHome } = require('../middleware/auth');
 const { callReadProc, callWriteProc } = require('../utils/procedures');
+const { isUuid, sendProcError } = require('../utils/routeHelpers');
 const { getSignedPhotoUrl } = require('../utils/s3');
 
 const router = express.Router();
 
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VISIBILITY = { all: null, public: false, private: true };
-const ERROR_STATUS = { NOT_FOUND: 404, FORBIDDEN: 403, INVALID: 400 };
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
 
 // undefined / null / '' -> null (not supplied), whole number >= 0 -> number, anything else -> NaN
 function parseQuantity(value) {
@@ -40,12 +37,6 @@ async function withPhotoUrl({ photo_s3_key, ...item }) {
 async function getVisibleItem(req, itemId) {
   const rows = await callReadProc('sp_getItemByID', [itemId, req.user.home_id, req.user.id]);
   return rows.length ? withPhotoUrl(rows[0]) : null;
-}
-
-// Business-rule failure from a write proc -> HTTP response
-function sendProcError(res, result) {
-  const status = ERROR_STATUS[result.p_error_code] || 400;
-  return res.status(status).json({ error: result.p_message, code: result.p_error_code });
 }
 
 // ---------------------------------------------------------------------------
