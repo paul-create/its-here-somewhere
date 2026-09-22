@@ -71,9 +71,9 @@ CREATE TABLE public.categories (
   CONSTRAINT categories_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
 );
 
-INSERT INTO public.categories (id, home_id, name, color, icon, created_by, created_at, updated_at)
-  SELECT id, '00000000-0000-0000-0000-000000000001', name, color, icon, created_by, created_at, updated_at
-  FROM categories_temp;
+INSERT INTO public.homes (id, name, home_code, created_at, updated_at)
+  VALUES ('00000000-0000-0000-0000-000000000001', 'Default Home', 'default-home-one', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ON CONFLICT (id) DO NOTHING;
 
 DROP TABLE categories_temp;
 
