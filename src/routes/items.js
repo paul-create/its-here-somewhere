@@ -1,85 +1,100 @@
 const express = require('express');
-const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { requireHome } = require('../middleware/auth');
-const { callReadProc } = require('../utils/procedures');
+const { callReadProc, callWriteProc } = require('../utils/procedures');
 const { getSignedPhotoUrl } = require('../utils/s3');
 
 const router = express.Router();
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const VISIBILITY = { all: null, public: false, private: true };
+const ERROR_STATUS = { NOT_FOUND: 404, FORBIDDEN: 403, INVALID: 400 };
 
-// Helper: Get category name
-async function getCategoryName(categoryId) {
-  const result = await pool.query('SELECT name FROM categories WHERE id = $1', [categoryId]);
-  return result.rows[0]?.name || 'Unknown';
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+const isUuid = (value) => typeof value === 'string' && UUID_RE.test(value);
+
+// undefined / null / '' -> null (not supplied), whole number >= 0 -> number, anything else -> NaN
+function parseQuantity(value) {
+  if (value === undefined || value === null || value === '') return null;
+  const n = Number(value);
+  return Number.isInteger(n) && n >= 0 ? n : NaN;
 }
 
-// Helper: Get location name
-async function getLocationName(locationId) {
-  const result = await pool.query('SELECT name FROM locations WHERE id = $1', [locationId]);
-  return result.rows[0]?.name || 'Unknown';
+// Swap the private S3 key for a short-lived signed URL
+async function withPhotoUrl({ photo_s3_key, ...item }) {
+  let photo_url = null;
+  if (photo_s3_key) {
+    try {
+      photo_url = await getSignedPhotoUrl(photo_s3_key);
+    } catch (e) {
+      console.error('Failed to sign photo URL:', e.message);
+    }
+  }
+  return { ...item, photo_url };
 }
 
-// Helper: Log activity
-async function logActivity(itemId, userId, property, oldValue, newValue) {
-  await pool.query(
-    'INSERT INTO activity_log (item_id, changed_by, property, old_value, new_value, changed_at) VALUES ($1, $2, $3, $4, $5, NOW())',
-    [itemId, userId, property, oldValue, newValue]
-  );
+// Single item the current user is allowed to see, or null
+async function getVisibleItem(req, itemId) {
+  const rows = await callReadProc('sp_getItemByID', [itemId, req.user.home_id, req.user.id]);
+  return rows.length ? withPhotoUrl(rows[0]) : null;
 }
 
+// Business-rule failure from a write proc -> HTTP response
+function sendProcError(res, result) {
+  const status = ERROR_STATUS[result.p_error_code] || 400;
+  return res.status(status).json({ error: result.p_message, code: result.p_error_code });
+}
+
+// ---------------------------------------------------------------------------
 // POST /api/items (create)
-router.post('/', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+router.post('/', authMiddleware, requireHome, async (req, res) => {
   try {
-    const { name, description, quantity, category_id, location_id } = req.body;
+    const { name, description, category_id, location_id } = req.body;
+    const quantity = parseQuantity(req.body.quantity);
 
-    if (!name) {
+    if (typeof name !== 'string' || !name.trim()) {
       return res.status(400).json({ error: 'Name is required' });
     }
-
-    if (!category_id) {
-      return res.status(400).json({ error: 'Category ID is required' });
+    if (name.trim().length > 255) {
+      return res.status(400).json({ error: 'Name must be 255 characters or fewer' });
+    }
+    if (!isUuid(category_id)) {
+      return res.status(400).json({ error: 'A valid category_id is required' });
+    }
+    if (!isUuid(location_id)) {
+      return res.status(400).json({ error: 'A valid location_id is required' });
+    }
+    if (Number.isNaN(quantity)) {
+      return res.status(400).json({ error: 'Quantity must be a whole number of 0 or more' });
     }
 
-    if (!location_id) {
-      return res.status(400).json({ error: 'Location ID is required' });
-    }
+    const result = await callWriteProc('sp_createItem', [
+      req.user.home_id,
+      category_id,
+      name.trim(),
+      typeof description === 'string' ? description.trim() || null : null,
+      quantity,
+      location_id,
+      req.user.id
+    ], 3);
 
-    // Create the item
-    const itemResult = await pool.query(
-      'INSERT INTO items (category_id, name, description, quantity, created_by, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, NOW(), NOW()) RETURNING *',
-      [category_id, name, description || null, quantity || 1, req.user.id]
-    );
+    if (result.p_error_code) return sendProcError(res, result);
 
-    const item = itemResult.rows[0];
-
-    // Create the item_location record
-    await pool.query(
-      'INSERT INTO item_locations (item_id, location_id, moved_by, stored_at, created_at) VALUES ($1, $2, $3, NOW(), NOW())',
-      [item.id, location_id, req.user.id]
-    );
-
-    // Log activity - Category
-    const categoryName = await getCategoryName(category_id);
-    await logActivity(item.id, req.user.id, 'Category', null, categoryName);
-
-    // Log activity - Location
-    const locationName = await getLocationName(location_id);
-    await logActivity(item.id, req.user.id, 'Location', null, locationName);
-
-    res.status(201).json({
-      ...item,
-      location_id
-    });
+    const item = await getVisibleItem(req, result.p_item_id);
+    res.status(201).json(item);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to create item' });
   }
 });
 
+// ---------------------------------------------------------------------------
 // GET /api/items?page=1&pageSize=5&visibility=public&category_id=...
+// ---------------------------------------------------------------------------
 router.get('/', authMiddleware, requireHome, async (req, res) => {
   try {
     const { category_id } = req.query;
@@ -90,7 +105,7 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
     if (!(visibility in VISIBILITY)) {
       return res.status(400).json({ error: 'visibility must be all, public or private' });
     }
-    if (category_id && !UUID_RE.test(category_id)) {
+    if (category_id && !isUuid(category_id)) {
       return res.status(400).json({ error: 'Invalid category_id' });
     }
 
@@ -104,19 +119,8 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
     ]);
 
     const total = rows.length ? Number(rows[0].total_count) : 0;
-
     const items = await Promise.all(
-      rows.map(async ({ total_count, photo_s3_key, ...item }) => {
-        let photo_url = null;
-        if (photo_s3_key) {
-          try {
-            photo_url = await getSignedPhotoUrl(photo_s3_key);
-          } catch (e) {
-            console.error('Failed to sign photo URL:', e.message);
-          }
-        }
-        return { ...item, photo_url };
-      })
+      rows.map(({ total_count, ...item }) => withPhotoUrl(item))
     );
 
     res.json({
@@ -132,213 +136,147 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
   }
 });
 
+// ---------------------------------------------------------------------------
 // GET /api/items/:id (get one)
-router.get('/:id', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+router.get('/:id', authMiddleware, requireHome, async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid item id' });
+    }
 
-    const result = await pool.query(
-      `SELECT i.*, il.location_id 
-       FROM items i 
-       JOIN categories c ON i.category_id = c.id 
-       LEFT JOIN LATERAL (
-         SELECT location_id FROM item_locations 
-         WHERE item_id = i.id 
-         ORDER BY created_at DESC 
-         LIMIT 1
-       ) il ON true
-       WHERE i.id = $1 AND ((c.is_private = false) OR (c.created_by = $2))`,
-      [id, req.user.id]
-    );
-
-    if (result.rows.length === 0) {
+    const item = await getVisibleItem(req, id);
+    if (!item) {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    res.json(result.rows[0]);
+    res.json(item);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch item' });
   }
 });
 
-// PUT /api/items/:id (update)
-router.put('/:id', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// PUT /api/items/:id (update - creator only)
+// ---------------------------------------------------------------------------
+router.put('/:id', authMiddleware, requireHome, async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, description, quantity, category_id } = req.body;
+    const { name, description, category_id } = req.body;
+    const quantity = parseQuantity(req.body.quantity);
 
-    // Check ownership
-    const checkResult = await pool.query(
-      'SELECT * FROM items WHERE id = $1 AND created_by = $2',
-      [id, req.user.id]
-    );
-
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Item not found' });
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid item id' });
+    }
+    if (name !== undefined && (typeof name !== 'string' || !name.trim())) {
+      return res.status(400).json({ error: 'Name cannot be empty' });
+    }
+    if (typeof name === 'string' && name.trim().length > 255) {
+      return res.status(400).json({ error: 'Name must be 255 characters or fewer' });
+    }
+    if (category_id !== undefined && !isUuid(category_id)) {
+      return res.status(400).json({ error: 'Invalid category_id' });
+    }
+    if (Number.isNaN(quantity)) {
+      return res.status(400).json({ error: 'Quantity must be a whole number of 0 or more' });
     }
 
-    const item = checkResult.rows[0];
+    const result = await callWriteProc('sp_updateItem', [
+      id,
+      req.user.home_id,
+      req.user.id,
+      typeof name === 'string' ? name.trim() : null,
+      typeof description === 'string' ? description.trim() : null,
+      quantity,
+      category_id || null
+    ]);
 
-    // Log category change if it happened
-    if (category_id !== undefined && category_id !== item.category_id) {
-      const oldCategoryName = await getCategoryName(item.category_id);
-      const newCategoryName = await getCategoryName(category_id);
-      await logActivity(id, req.user.id, 'Category', oldCategoryName, newCategoryName);
-    }
+    if (result.p_error_code) return sendProcError(res, result);
 
-    const updateResult = await pool.query(
-      'UPDATE items SET name = $1, description = $2, quantity = $3, category_id = $4, updated_at = NOW() WHERE id = $5 RETURNING *',
-      [
-        name !== undefined ? name : item.name,
-        description !== undefined ? description : item.description,
-        quantity !== undefined ? quantity : item.quantity,
-        category_id !== undefined ? category_id : item.category_id,
-        id
-      ]
-    );
-
-    res.json(updateResult.rows[0]);
+    const item = await getVisibleItem(req, id);
+    res.json(item);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to update item' });
   }
 });
 
-// DELETE /api/items/:id (delete)
-router.delete('/:id', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// DELETE /api/items/:id (soft delete - creator only)
+// ---------------------------------------------------------------------------
+router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
   try {
     const { id } = req.params;
-
-    // Check ownership first
-    const checkResult = await pool.query(
-      'SELECT * FROM items WHERE id = $1 AND created_by = $2',
-      [id, req.user.id]
-    );
-
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Item not found' });
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid item id' });
     }
 
-    const item = checkResult.rows[0];
+    const result = await callWriteProc('sp_softDeleteItem', [id, req.user.home_id, req.user.id]);
 
-    // Delete in FK-safe order
-    // 1. Delete tags (references photos)
-    await pool.query(
-      'DELETE FROM tags WHERE photo_id IN (SELECT id FROM photos WHERE item_id = $1)',
-      [id]
-    );
+    if (result.p_error_code) return sendProcError(res, result);
 
-    // 2. Delete photos (references items)
-    await pool.query('DELETE FROM photos WHERE item_id = $1', [id]);
-
-    // 3. Delete item_locations (references items)
-    await pool.query('DELETE FROM item_locations WHERE item_id = $1', [id]);
-
-    // 4. Delete activity_log (references items)
-    await pool.query('DELETE FROM activity_log WHERE item_id = $1', [id]);
-
-    // 5. Finally delete the item
-    const deleteResult = await pool.query(
-      'DELETE FROM items WHERE id = $1 RETURNING *',
-      [id]
-    );
-
-    res.json({ message: 'Item deleted', item: deleteResult.rows[0] });
+    res.json({ message: result.p_message });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to delete item' });
   }
 });
 
-// PUT /api/items/:id/location (move item to new location)
-router.put('/:id/location', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// PUT /api/items/:id/location (move - anyone who can see the item)
+// ---------------------------------------------------------------------------
+router.put('/:id/location', authMiddleware, requireHome, async (req, res) => {
   try {
     const { id } = req.params;
     const { location_id } = req.body;
 
-    if (!location_id) {
-      return res.status(400).json({ error: 'Location ID is required' });
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid item id' });
+    }
+    if (!isUuid(location_id)) {
+      return res.status(400).json({ error: 'A valid location_id is required' });
     }
 
-    // Check ownership
-    const checkResult = await pool.query(
-      'SELECT * FROM items WHERE id = $1 AND created_by = $2',
-      [id, req.user.id]
-    );
+    const result = await callWriteProc('sp_moveItemLocation', [
+      id,
+      req.user.home_id,
+      location_id,
+      req.user.id
+    ]);
 
-    if (checkResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Item not found' });
-    }
+    if (result.p_error_code) return sendProcError(res, result);
 
-    // Get old location
-    const oldLocationResult = await pool.query(
-      'SELECT location_id FROM item_locations WHERE item_id = $1 ORDER BY created_at DESC LIMIT 1',
-      [id]
-    );
-
-    const oldLocationId = oldLocationResult.rows[0]?.location_id;
-    const oldLocationName = oldLocationId ? await getLocationName(oldLocationId) : 'None';
-    const newLocationName = await getLocationName(location_id);
-
-    // Create new item_location record
-    await pool.query(
-      'INSERT INTO item_locations (item_id, location_id, moved_by, stored_at, created_at) VALUES ($1, $2, $3, NOW(), NOW())',
-      [id, location_id, req.user.id]
-    );
-
-    // Log activity
-    await logActivity(id, req.user.id, 'Location', oldLocationName, newLocationName);
-
-    const item = await pool.query(
-      'SELECT * FROM items WHERE id = $1',
-      [id]
-    );
-
-    res.json({
-      ...item.rows[0],
-      location_id
-    });
+    const item = await getVisibleItem(req, id);
+    res.json(item);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to move item' });
   }
 });
 
-// GET /api/items/:id/activity (get activity history)
-router.get('/:id/activity', authMiddleware, async (req, res) => {
+// ---------------------------------------------------------------------------
+// GET /api/items/:id/activity (activity history)
+// ---------------------------------------------------------------------------
+router.get('/:id/activity', authMiddleware, requireHome, async (req, res) => {
   try {
     const { id } = req.params;
+    if (!isUuid(id)) {
+      return res.status(400).json({ error: 'Invalid item id' });
+    }
 
-    // Check ownership
-    const checkResult = await pool.query(
-      'SELECT created_by FROM items WHERE id = $1',
-      [id]
-    );
-
-    if (checkResult.rows.length === 0) {
+    // Visibility check first, so private items' history stays private
+    const found = await callReadProc('sp_getItemByID', [id, req.user.home_id, req.user.id]);
+    if (found.length === 0) {
       return res.status(404).json({ error: 'Item not found' });
     }
 
-    // Get activity log for this item
-    const result = await pool.query(
-      `SELECT 
-        id,
-        property,
-        old_value,
-        new_value,
-        changed_at,
-        (SELECT email FROM users WHERE id = changed_by) as changed_by_email
-      FROM activity_log 
-      WHERE item_id = $1 
-      ORDER BY changed_at DESC`,
-      [id]
-    );
-
-    res.json(result.rows);
+    const rows = await callReadProc('sp_getActivityLog', [id, req.user.home_id]);
+    res.json(rows);
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch activity' });
   }
 });
 

@@ -34,7 +34,7 @@ BEGIN
     SELECT location_id
     FROM item_locations
     WHERE item_id = i.id
-    ORDER BY created_at DESC
+    ORDER BY created_at DESC NULLS LAST
     LIMIT 1
   ) il ON true
   LEFT JOIN locations l ON l.id = il.location_id
@@ -42,7 +42,7 @@ BEGIN
     SELECT s3_key
     FROM photos
     WHERE item_id = i.id
-    ORDER BY created_at DESC
+    ORDER BY created_at DESC NULLS LAST
     LIMIT 1
   ) ph ON true
   WHERE i.home_id = p_home_id

@@ -2,14 +2,14 @@ CREATE OR REPLACE FUNCTION fn_audit_items()
 RETURNS TRIGGER AS $$
 BEGIN
   IF TG_OP = 'UPDATE' THEN
-    IF OLD.name != NEW.name THEN
-      INSERT INTO activity_log (home_id, item_id, changed_by, property, old_value, new_value)
-      VALUES (NEW.home_id, NEW.id, NEW.created_by, 'Name', OLD.name, NEW.name);
+    IF OLD.name IS DISTINCT FROM NEW.name THEN
+      INSERT INTO activity_log (home_id, item_id, changed_by, changed_at, property, old_value, new_value, created_at)
+      VALUES (NEW.home_id, NEW.id, NEW.created_by, NOW(), 'Name', OLD.name, NEW.name, NOW());
     END IF;
-    
-    IF OLD.description != NEW.description THEN
-      INSERT INTO activity_log (home_id, item_id, changed_by, property, old_value, new_value)
-      VALUES (NEW.home_id, NEW.id, NEW.created_by, 'Description', OLD.description, NEW.description);
+
+    IF OLD.description IS DISTINCT FROM NEW.description THEN
+      INSERT INTO activity_log (home_id, item_id, changed_by, changed_at, property, old_value, new_value, created_at)
+      VALUES (NEW.home_id, NEW.id, NEW.created_by, NOW(), 'Description', OLD.description, NEW.description, NOW());
     END IF;
   END IF;
   RETURN NEW;

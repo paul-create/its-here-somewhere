@@ -10,7 +10,8 @@ function buildCall(procName, paramCount, outCount) {
   return `CALL ${procName}(${args.join(', ')})`;
 }
 
-// Read procs (OUT result REFCURSOR): open connection, BEGIN, CALL, FETCH, COMMIT, release
+// Read procs (OUT result REFCURSOR).
+// Open connection, BEGIN, CALL, FETCH the cursor, COMMIT, release the connection.
 async function callReadProc(procName, params = []) {
   const client = await pool.connect();
   try {
@@ -28,11 +29,14 @@ async function callReadProc(procName, params = []) {
   }
 }
 
-// Write procs (OUT p_success, OUT p_message): open connection, CALL, release
-async function callWriteProc(procName, params = []) {
+// Write procs (OUT p_error_code, OUT p_message, plus any extra OUT params such as p_item_id).
+// Open connection, CALL (runs as one transaction), release the connection.
+// outCount = total number of OUT params the procedure declares.
+// Returns the OUT values as an object, e.g. { p_error_code, p_message, p_item_id }.
+async function callWriteProc(procName, params = [], outCount = 2) {
   const client = await pool.connect();
   try {
-    const result = await client.query(buildCall(procName, params.length, 2), params);
+    const result = await client.query(buildCall(procName, params.length, outCount), params);
     return result.rows[0];
   } finally {
     client.release();
