@@ -49,8 +49,7 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/psycopg2/__init__.py", line 122, in connect
     conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-psycopg2.OperationalError: connection to server at "its-here-somewhere-postgres.chqokc88qwim.eu-west-2.rds.amazonaws.com" (35.176.189.64), port 5432 failed: FATAL:  password authentication failed for user "postgresql"
-connection to server at "its-here-somewhere-postgres.chqokc88qwim.eu-west-2.rds.amazonaws.com" (35.176.189.64), port 5432 failed: FATAL:  no pg_hba.conf entry for host "172.171.107.83", user "postgresql", database "its_here_somewhere", no encryption
+psycopg2.OperationalError: connection to server at "its-here-somewhere-postgres.chqokc88qwim.eu-west-2.rds.amazonaws.com" (35.176.189.64), port 5432 failed: FATAL:  database "_compare" does not exist
 
 
 The above exception was the direct cause of the following exception:
@@ -65,9 +64,9 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/migra/command.py", line 86, in run
     m = Migration(
         ^^^^^^^^^^
-  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/migra/migra.py", line 31, in __init__
-    self.changes.i_from = get_inspector(
-                          ^^^^^^^^^^^^^^
+  File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/migra/migra.py", line 39, in __init__
+    self.changes.i_target = get_inspector(
+                            ^^^^^^^^^^^^^^
   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/schemainspect/get.py", line 14, in get_inspector
     c = connection_from_s_or_c(x)
         ^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -137,7 +136,6 @@ Traceback (most recent call last):
   File "/opt/hostedtoolcache/Python/3.11.16/x64/lib/python3.11/site-packages/psycopg2/__init__.py", line 122, in connect
     conn = _connect(dsn, connection_factory=connection_factory, **kwasync)
            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "its-here-somewhere-postgres.chqokc88qwim.eu-west-2.rds.amazonaws.com" (35.176.189.64), port 5432 failed: FATAL:  password authentication failed for user "postgresql"
-connection to server at "its-here-somewhere-postgres.chqokc88qwim.eu-west-2.rds.amazonaws.com" (35.176.189.64), port 5432 failed: FATAL:  no pg_hba.conf entry for host "172.171.107.83", user "postgresql", database "its_here_somewhere", no encryption
+sqlalchemy.exc.OperationalError: (psycopg2.OperationalError) connection to server at "its-here-somewhere-postgres.chqokc88qwim.eu-west-2.rds.amazonaws.com" (35.176.189.64), port 5432 failed: FATAL:  database "_compare" does not exist
 
 (Background on this error at: https://sqlalche.me/e/20/e3q8)
