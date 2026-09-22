@@ -2,12 +2,12 @@ CREATE OR REPLACE PROCEDURE sp_updateItem(
   p_item_id UUID,
   p_home_id UUID,
   p_user_id UUID,
+  OUT p_error_code VARCHAR,
+  OUT p_message VARCHAR,
   p_name VARCHAR DEFAULT NULL,
   p_description TEXT DEFAULT NULL,
   p_quantity INTEGER DEFAULT NULL,
-  p_category_id UUID DEFAULT NULL,
-  OUT p_error_code VARCHAR,
-  OUT p_message VARCHAR
+  p_category_id UUID DEFAULT NULL
 )
 LANGUAGE plpgsql
 AS $$
