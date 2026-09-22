@@ -30,7 +30,7 @@ jobs:
         run: bash sql/scripts/deploy.sh
 
       - name: Upload migration plan
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: migration-plan
           path: sql/scripts/migration_delta.sql
