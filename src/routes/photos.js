@@ -3,6 +3,9 @@ const multer = require('multer');
 const { randomUUID } = require('crypto');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { requireHome } = require('../middleware/auth');
+const { callReadProc, callWriteProc } = require('../utils/procedures');
+const { isUuid } = require('../utils/routeHelpers');
 const { uploadPhotoToS3 } = require('../utils/s3');
 const { tagPhoto } = require('../utils/claude');
 const { getSignedPhotoUrl } = require('../utils/s3');
@@ -11,7 +14,7 @@ const router = express.Router();
 const upload = multer({ storage: multer.memoryStorage() });
 
 // POST /api/photos (upload photo, tag with Claude, store in DB)
-router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
+router.post('/', authMiddleware, requireHome, upload.single('file'), async (req, res) => {
   try {
     // itemId can come from query or body
     const itemId = req.query.itemId || req.body.itemId;
@@ -67,29 +70,12 @@ router.post('/', authMiddleware, upload.single('file'), async (req, res) => {
 });
 
 // GET /api/photos (retrieve all photos for user's items)
-router.get('/', authMiddleware, async (req, res) => {
+router.get('/', authMiddleware, requireHome, async (req, res) => {
   try {
-    const userId = req.user.id;
-
-    // Get all photos for items the user can see (public items + own private items)
-    const result = await pool.query(`
-      SELECT 
-        p.id,
-        p.item_id,
-        p.s3_key,
-        p.created_at,
-        array_agg(t.tag_name) FILTER (WHERE t.tag_name IS NOT NULL) as tags
-      FROM photos p
-      LEFT JOIN tags t ON p.id = t.photo_id
-      INNER JOIN items i ON p.item_id = i.id
-      INNER JOIN categories c ON i.category_id = c.id
-      WHERE c.is_private = false OR i.created_by = $1
-      GROUP BY p.id, p.item_id, p.s3_key, p.created_at
-      ORDER BY p.created_at DESC
-    `, [userId]);
+    const rows = await callReadProc('sp_getAllPhotos', [req.user.home_id, req.user.id]);
 
     // Generate signed URLs for each photo
-    const photos = await Promise.all(result.rows.map(async (row) => {
+    const photos = await Promise.all(rows.map(async (row) => {
       const signedUrl = await getSignedPhotoUrl(row.s3_key, 3600);
       return {
         id: row.id,
@@ -104,49 +90,38 @@ router.get('/', authMiddleware, async (req, res) => {
     res.json(photos);
   } catch (err) {
     console.error('Error fetching photos:', err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch photos' });
   }
 });
 
 // DELETE /api/photos/:photoId (delete a photo)
-router.delete('/:photoId', authMiddleware, async (req, res) => {
+router.delete('/:photoId', authMiddleware, requireHome, async (req, res) => {
   try {
     const { photoId } = req.params;
 
-    // Get the photo
-    const photoResult = await pool.query(
-      'SELECT * FROM photos WHERE id = $1',
-      [photoId]
-    );
-
-    if (photoResult.rows.length === 0) {
-      return res.status(404).json({ error: 'Photo not found' });
+    if (!isUuid(photoId)) {
+      return res.status(400).json({ error: 'Invalid photo id' });
     }
 
-    const photo = photoResult.rows[0];
+    const result = await callWriteProc('sp_softDeletePhoto', [
+      photoId,
+      req.user.home_id,
+      req.user.id
+    ]);
 
-    // Verify ownership by checking item
-    const itemResult = await pool.query(
-      'SELECT created_by FROM items WHERE id = $1',
-      [photo.item_id]
-    );
-
-    if (itemResult.rows.length === 0 || itemResult.rows[0].created_by !== req.user.id) {
-      return res.status(403).json({ error: 'Not authorized' });
+    if (!result.p_success) {
+      if (result.p_message === 'Photo not found') {
+        return res.status(404).json({ error: result.p_message });
+      }
+      return res.status(403).json({ error: result.p_message });
     }
-
-    // Delete tags first
-    await pool.query('DELETE FROM tags WHERE photo_id = $1', [photoId]);
-
-    // Delete photo from DB
-    await pool.query('DELETE FROM photos WHERE id = $1', [photoId]);
 
     // Note: We're not deleting from S3 to keep history, but in production you might want to
 
-    res.json({ message: 'Photo deleted' });
+    res.json({ message: result.p_message });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to delete photo' });
   }
 });
 
