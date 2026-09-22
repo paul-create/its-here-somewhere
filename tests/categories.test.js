@@ -39,8 +39,7 @@ async function runCategoryTests(token) {
     // 4. PUT category
     console.log('4. Testing PUT /api/categories/:id');
     const putRes = await request('PUT', `/api/categories/${testCategoryId}`, {
-      name: `Storage Updated-${timestamp}`,
-      is_private: false
+      name: `Storage Updated-${timestamp}`
     });
     assert.strictEqual(putRes.status, 200, `PUT failed`);
     console.log('✓ Updated category\n');
