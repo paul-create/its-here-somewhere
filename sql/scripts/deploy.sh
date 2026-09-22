@@ -58,7 +58,7 @@ done
 
 # Step 5: Compare using migra
 echo "Step 5: Comparing production vs desired state..."
-MIGRA_OUTPUT=$(migra "postgresql://$PROD_DB" "postgresql://$(echo $PROD_DB | sed 's/\/its_here_somewhere/\/_compare/')" 2>&1) || true
+MIGRA_OUTPUT=$(migra "$PROD_DB" "$(echo $PROD_DB | sed 's/\/its_here_somewhere/\/_compare/')" 2>&1) || true
 
 if [ -n "$MIGRA_OUTPUT" ] && [ "$MIGRA_OUTPUT" != "-- no changes" ]; then
   echo "$MIGRA_OUTPUT" > sql/scripts/migration_delta.sql
