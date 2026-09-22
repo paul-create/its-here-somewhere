@@ -1,8 +1,14 @@
 const express = require('express');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
+const { requireHome } = require('../middleware/auth');
+const { callReadProc } = require('../utils/procedures');
+const { getSignedPhotoUrl } = require('../utils/s3');
 
 const router = express.Router();
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const VISIBILITY = { all: null, public: false, private: true };
 
 // Helper: Get category name
 async function getCategoryName(categoryId) {
@@ -73,37 +79,56 @@ router.post('/', authMiddleware, async (req, res) => {
   }
 });
 
-// GET /api/items (list - only items in public categories or your categories)
-router.get('/', authMiddleware, async (req, res) => {
+// GET /api/items?page=1&pageSize=5&visibility=public&category_id=...
+router.get('/', authMiddleware, requireHome, async (req, res) => {
   try {
     const { category_id } = req.query;
+    const visibility = req.query.visibility || 'all';
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const pageSize = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 5, 1), 50);
 
-    let query = `
-      SELECT i.*, il.location_id 
-      FROM items i
-      JOIN categories c ON i.category_id = c.id
-      LEFT JOIN LATERAL (
-        SELECT location_id FROM item_locations 
-        WHERE item_id = i.id 
-        ORDER BY created_at DESC 
-        LIMIT 1
-      ) il ON true
-      WHERE (c.is_private = false) OR (c.created_by = $1)
-    `;
-    const params = [req.user.id];
-
-    if (category_id) {
-      query += ` AND i.category_id = $${params.length + 1}`;
-      params.push(category_id);
+    if (!(visibility in VISIBILITY)) {
+      return res.status(400).json({ error: 'visibility must be all, public or private' });
+    }
+    if (category_id && !UUID_RE.test(category_id)) {
+      return res.status(400).json({ error: 'Invalid category_id' });
     }
 
-    query += ' ORDER BY i.created_at DESC';
+    const rows = await callReadProc('sp_getAllItems', [
+      req.user.home_id,
+      req.user.id,
+      category_id || null,
+      VISIBILITY[visibility],
+      pageSize,
+      (page - 1) * pageSize
+    ]);
 
-    const result = await pool.query(query, params);
-    res.json(result.rows);
+    const total = rows.length ? Number(rows[0].total_count) : 0;
+
+    const items = await Promise.all(
+      rows.map(async ({ total_count, photo_s3_key, ...item }) => {
+        let photo_url = null;
+        if (photo_s3_key) {
+          try {
+            photo_url = await getSignedPhotoUrl(photo_s3_key);
+          } catch (e) {
+            console.error('Failed to sign photo URL:', e.message);
+          }
+        }
+        return { ...item, photo_url };
+      })
+    );
+
+    res.json({
+      items,
+      page,
+      pageSize,
+      total,
+      totalPages: Math.max(Math.ceil(total / pageSize), 1)
+    });
   } catch (err) {
     console.error(err);
-    res.status(500).json({ error: err.message });
+    res.status(500).json({ error: 'Failed to fetch items' });
   }
 });
 

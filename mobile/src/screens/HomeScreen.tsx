@@ -1,50 +1,89 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useRef, useCallback } from 'react';
 import { View, StyleSheet, FlatList, TouchableOpacity, Text, ActivityIndicator, RefreshControl, Image } from 'react-native';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { AppHeaderComponent } from '../components/AppHeaderComponent';
 
+const API = 'http://192.168.1.146:3000/api';
+const ITEMS_PER_PAGE = 5;
+const PRIVATE_LIMIT = 50;
+
+// Matches the columns returned by GET /api/items (sp_getAllItems + signed photo_url)
 interface Item {
   id: string;
   name: string;
+  description: string | null;
+  quantity: number | null;
   category_id: string;
-  location_id?: string;
-  quantity?: number;
+  category_name: string;
+  category_is_private: boolean;
+  location_id: string | null;
+  location_name: string | null;
+  photo_url: string | null;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
 }
 
-interface Category {
-  id: string;
-  name: string;
-  is_private: boolean;
-}
-
-interface Location {
-  id: string;
-  name: string;
-  is_private: boolean;
-}
-
-interface Photo {
-  id: string;
-  item_id: string;
-  s3_url: string;
+interface ItemsPage {
+  items: Item[];
+  page: number;
+  pageSize: number;
+  total: number;
+  totalPages: number;
 }
 
 export function HomeScreen({ navigation }: any) {
-  const [items, setItems] = useState<Item[]>([]);
-  const [categories, setCategories] = useState<Category[]>([]);
-  const [locations, setLocations] = useState<Location[]>([]);
-  const [photos, setPhotos] = useState<Photo[]>([]);
+  const [publicItems, setPublicItems] = useState<Item[]>([]);
+  const [privateItems, setPrivateItems] = useState<Item[]>([]);
+  const [privateTotal, setPrivateTotal] = useState(0);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
+  const [isPageLoading, setIsPageLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPrivate, setShowPrivate] = useState(false);
-  const [currentPage, setCurrentPage] = useState(0);
-  const ITEMS_PER_PAGE = 5;
+  const currentPageRef = useRef(0);
+  const listRef = useRef<FlatList<Item>>(null);
   const { token } = useAuth();
 
-  const fetchItemsAndData = async () => {
+  const fetchItemsPage = async (
+    visibility: 'public' | 'private',
+    page: number,
+    pageSize: number
+  ): Promise<ItemsPage> => {
+    const res = await fetch(
+      `${API}/items?visibility=${visibility}&page=${page + 1}&pageSize=${pageSize}`,
+      { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } }
+    );
+    if (!res.ok) throw new Error('Could not load your items. Pull down to try again.');
+    return res.json();
+  };
+
+  const loadPublicPage = async (page: number) => {
+    let data = await fetchItemsPage('public', page, ITEMS_PER_PAGE);
+
+    // Page no longer exists (e.g. last item on it was deleted) - step back one page
+    if (data.items.length === 0 && page > 0) {
+      page = page - 1;
+      data = await fetchItemsPage('public', page, ITEMS_PER_PAGE);
+    }
+
+    setPublicItems(data.items);
+    setTotalPages(data.totalPages);
+    setCurrentPage(page);
+    currentPageRef.current = page;
+  };
+
+  const loadPrivateItems = async () => {
+    const data = await fetchItemsPage('private', 0, PRIVATE_LIMIT);
+    setPrivateItems(data.items);
+    setPrivateTotal(data.total);
+  };
+
+  const loadAll = async (page: number) => {
     if (!token) {
       setError('Not authenticated');
       setIsLoading(false);
@@ -52,153 +91,79 @@ export function HomeScreen({ navigation }: any) {
     }
 
     try {
-      const [itemsResponse, categoriesResponse, locationsResponse, photosResponse] = await Promise.all([
-        fetch('http://192.168.1.146:3000/api/items', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        }),
-        fetch('http://192.168.1.146:3000/api/categories', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        }),
-        fetch('http://192.168.1.146:3000/api/locations', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        }),
-        fetch('http://192.168.1.146:3000/api/photos', {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-        })
-      ]);
-
-      if (!itemsResponse.ok || !categoriesResponse.ok || !locationsResponse.ok) {
-        throw new Error('Failed to load data');
-      }
-      
-      const itemsData = await itemsResponse.json();
-      const categoriesData = await categoriesResponse.json();
-      const locationsData = await locationsResponse.json();
-      const photosData = photosResponse.ok ? await photosResponse.json() : [];
-
-      const itemsArray = Array.isArray(itemsData) ? itemsData : (itemsData.items || []);
-      const categoriesArray = Array.isArray(categoriesData) ? categoriesData : (categoriesData.categories || []);
-      const locationsArray = Array.isArray(locationsData) ? locationsData : (locationsData.locations || []);
-      const photosArray = Array.isArray(photosData) ? photosData : (photosData.photos || []);
-
-      setItems(itemsArray);
-      setCategories(categoriesArray);
-      setLocations(locationsArray);
-      setPhotos(photosArray);
-      setCurrentPage(0);
+      await Promise.all([loadPublicPage(page), loadPrivateItems()]);
       setError(null);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Error loading items';
-      setError(errorMsg);
+      setError(err instanceof Error ? err.message : 'Could not load your items.');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
   };
 
+  // Runs on first load and every time you come back from Add / ItemDetails.
+  // Stays on the page you were on rather than jumping back to page 1.
   useFocusEffect(
-    React.useCallback(() => {
-      if (token) {
-        fetchItemsAndData();
-      }
+    useCallback(() => {
+      loadAll(currentPageRef.current);
     }, [token])
   );
 
-  // Also add this for first load
-  useEffect(() => {
-    if (token) {
-      fetchItemsAndData();
-    }
-  }, [token]);
-
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchItemsAndData();
+    loadAll(0);
   };
 
-  const isItemPrivate = (item: Item): boolean => {
-    const category = categories.find(c => c.id === item.category_id);
-    //console.log(`Item: ${item.name}, Category: ${category?.name}, is_private: ${category?.is_private}`);
-    return category?.is_private || false;
+  const goToPage = async (page: number) => {
+    if (isPageLoading) return;
+    setIsPageLoading(true);
+    try {
+      await loadPublicPage(page);
+      setError(null);
+      listRef.current?.scrollToOffset({ offset: 0, animated: true });
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load that page.');
+    } finally {
+      setIsPageLoading(false);
+    }
   };
 
-  const { publicItems, privateItems } = useMemo(() => {
-    return {
-      publicItems: items.filter(item => !isItemPrivate(item)),
-      privateItems: items.filter(item => isItemPrivate(item))
-    };
-  }, [items, categories]);
+  const renderItemCard = (item: Item, isPrivate: boolean) => {
+    const accent = isPrivate ? '#d32f2f' : '#008080';
 
-  const paginatedPublicItems = publicItems.slice(
-    currentPage * ITEMS_PER_PAGE,
-    (currentPage + 1) * ITEMS_PER_PAGE
-  );
-
-  const totalPages = Math.ceil(publicItems.length / ITEMS_PER_PAGE) || 1;
-
-  const getCategoryName = (categoryId: string): string => {
-    const category = categories.find(c => c.id === categoryId);
-    return category?.name || 'Uncategorised';
-  };
-
-  const getLocationName = (locationId: string): string => {
-    const location = locations.find(l => l.id === locationId);
-    return location?.name || 'Unknown';
-  };
-
-  const getPhotoUrl = (itemId: string): string | null => {
-    const photo = photos.find(p => p.item_id === itemId);
-    return photo?.s3_url || null;
-  };
-
-  const renderItem = ({ item }: any) => {
-    const photoUrl = getPhotoUrl(item.id);
-    
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
+        key={item.id}
         style={styles.itemCard}
         onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
       >
         <View style={styles.itemImagePlaceholder}>
-          {photoUrl ? (
-            <Image 
-              source={{ uri: photoUrl }} 
-              style={styles.itemImage}
-            />
+          {item.photo_url ? (
+            <Image source={{ uri: item.photo_url }} style={styles.itemImage} />
           ) : (
             <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
           )}
         </View>
-        
+
         <View style={styles.itemInfo}>
           <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemCategory}>{getCategoryName(item.category_id)}</Text>
-          {item.location_id && (
+          <Text style={isPrivate ? styles.itemCategoryPrivate : styles.itemCategory}>
+            {item.category_name || 'Uncategorised'}
+          </Text>
+          {item.location_id ? (
             <View style={styles.locationRow}>
-              <MaterialCommunityIcons name="map-marker" size={14} color="#008080" />
-              <Text style={styles.itemLocation}>{getLocationName(item.location_id)}</Text>
+              <MaterialCommunityIcons name="map-marker" size={14} color={accent} />
+              <Text style={[styles.itemLocation, { color: accent }]}>
+                {item.location_name ?? 'Unknown'}
+              </Text>
             </View>
-          )}
-          {item.quantity && <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>}
+          ) : null}
+          {item.quantity != null ? (
+            <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>
+          ) : null}
         </View>
 
-        <MaterialCommunityIcons name="chevron-right" size={24} color="#008080" />
+        <MaterialCommunityIcons name="chevron-right" size={24} color={accent} />
       </TouchableOpacity>
     );
   };
@@ -210,6 +175,9 @@ export function HomeScreen({ navigation }: any) {
       </View>
     );
   }
+
+  const isFirstPage = currentPage === 0;
+  const isLastPage = currentPage >= totalPages - 1;
 
   return (
     <View style={styles.container}>
@@ -240,36 +208,40 @@ export function HomeScreen({ navigation }: any) {
         </View>
       ) : (
         <FlatList
-          data={paginatedPublicItems}
-          renderItem={renderItem}
+          ref={listRef}
+          data={publicItems}
+          renderItem={({ item }) => renderItemCard(item, false)}
           keyExtractor={(item) => item.id}
-          scrollEnabled={true}
           contentContainerStyle={styles.listContent}
           ListFooterComponent={
             <View>
               {/* Pagination Controls */}
-              {publicItems.length > ITEMS_PER_PAGE && (
+              {totalPages > 1 && (
                 <View style={styles.paginationContainer}>
                   <TouchableOpacity
-                    disabled={currentPage === 0}
-                    onPress={() => setCurrentPage(currentPage - 1)}
-                    style={[styles.pageButton, currentPage === 0 && styles.pageButtonDisabled]}
+                    disabled={isFirstPage || isPageLoading}
+                    onPress={() => goToPage(currentPage - 1)}
+                    style={[styles.pageButton, isFirstPage && styles.pageButtonDisabled]}
                   >
-                    <MaterialCommunityIcons name="chevron-left" size={20} color={currentPage === 0 ? '#cccccc' : '#008080'} />
-                    <Text style={[styles.pageButtonText, currentPage === 0 && styles.pageButtonTextDisabled]}>Previous</Text>
+                    <MaterialCommunityIcons name="chevron-left" size={20} color={isFirstPage ? '#cccccc' : '#008080'} />
+                    <Text style={[styles.pageButtonText, isFirstPage && styles.pageButtonTextDisabled]}>Previous</Text>
                   </TouchableOpacity>
-                  
-                  <Text style={styles.pageIndicator}>
-                    {currentPage + 1} of {totalPages}
-                  </Text>
-                  
+
+                  {isPageLoading ? (
+                    <ActivityIndicator size="small" color="#008080" />
+                  ) : (
+                    <Text style={styles.pageIndicator}>
+                      {currentPage + 1} of {totalPages}
+                    </Text>
+                  )}
+
                   <TouchableOpacity
-                    disabled={currentPage >= totalPages - 1}
-                    onPress={() => setCurrentPage(currentPage + 1)}
-                    style={[styles.pageButton, currentPage >= totalPages - 1 && styles.pageButtonDisabled]}
+                    disabled={isLastPage || isPageLoading}
+                    onPress={() => goToPage(currentPage + 1)}
+                    style={[styles.pageButton, isLastPage && styles.pageButtonDisabled]}
                   >
-                    <Text style={[styles.pageButtonText, currentPage >= totalPages - 1 && styles.pageButtonTextDisabled]}>Next</Text>
-                    <MaterialCommunityIcons name="chevron-right" size={20} color={currentPage >= totalPages - 1 ? '#cccccc' : '#008080'} />
+                    <Text style={[styles.pageButtonText, isLastPage && styles.pageButtonTextDisabled]}>Next</Text>
+                    <MaterialCommunityIcons name="chevron-right" size={20} color={isLastPage ? '#cccccc' : '#008080'} />
                   </TouchableOpacity>
                 </View>
               )}
@@ -284,7 +256,7 @@ export function HomeScreen({ navigation }: any) {
                     <View style={styles.privateHeaderLeft}>
                       <MaterialCommunityIcons name="lock" size={20} color="#d32f2f" />
                       <Text style={styles.privateHeaderText}>
-                        Private Items ({privateItems.length})
+                        Private Items ({privateTotal})
                       </Text>
                     </View>
                     <MaterialCommunityIcons
@@ -296,41 +268,12 @@ export function HomeScreen({ navigation }: any) {
 
                   {showPrivate && (
                     <View style={styles.privateItemsContainer}>
-                      {privateItems.filter(item => !publicItems.some(p => p.id === item.id)).map((item) => {
-                        const photoUrl = getPhotoUrl(item.id);
-                        return (
-                          <TouchableOpacity 
-                            key={item.id} 
-                            style={styles.itemCard}
-                            onPress={() => navigation.navigate('ItemDetails', { itemId: item.id })}
-                          >
-                            <View style={styles.itemImagePlaceholder}>
-                              {photoUrl ? (
-                                <Image 
-                                  source={{ uri: photoUrl }} 
-                                  style={styles.itemImage}
-                                />
-                              ) : (
-                                <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
-                              )}
-                            </View>
-                            
-                            <View style={styles.itemInfo}>
-                              <Text style={styles.itemName}>{item.name}</Text>
-                              <Text style={styles.itemCategoryPrivate}>{getCategoryName(item.category_id)}</Text>
-                              {item.location_id && (
-                                <View style={styles.locationRow}>
-                                  <MaterialCommunityIcons name="map-marker" size={14} color="#d32f2f" />
-                                  <Text style={[styles.itemLocation, { color: '#d32f2f' }]}>{getLocationName(item.location_id)}</Text>
-                                </View>
-                              )}
-                              {item.quantity && <Text style={styles.itemQuantity}>Qty: {item.quantity}</Text>}
-                            </View>
-
-                            <MaterialCommunityIcons name="chevron-right" size={24} color="#d32f2f" />
-                          </TouchableOpacity>
-                        );
-                      })}
+                      {privateItems.map((item) => renderItemCard(item, true))}
+                      {privateTotal > privateItems.length && (
+                        <Text style={styles.privateNote}>
+                          Showing your {privateItems.length} most recent of {privateTotal} private items
+                        </Text>
+                      )}
                     </View>
                   )}
                 </View>
@@ -338,8 +281,8 @@ export function HomeScreen({ navigation }: any) {
             </View>
           }
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
+            <RefreshControl
+              refreshing={refreshing}
               onRefresh={handleRefresh}
               tintColor="#008080"
             />
@@ -513,6 +456,12 @@ const styles = StyleSheet.create({
   privateItemsContainer: {
     gap: 12,
   },
+  privateNote: {
+    fontSize: 12,
+    color: '#999999',
+    textAlign: 'center',
+    marginTop: 4,
+  },
   emptyText: {
     fontSize: 18,
     fontWeight: '600',
@@ -541,7 +490,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingVertical: 8,
   },
-    sectionHeader: {
+  sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',

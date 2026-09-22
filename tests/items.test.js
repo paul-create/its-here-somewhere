@@ -45,8 +45,9 @@ async function runItemTests(token) {
     console.log('2. Testing GET /api/items');
     const getRes = await request('GET', '/api/items');
     assert.strictEqual(getRes.status, 200, 'GET failed');
-    assert(Array.isArray(getRes.body), 'Should return array');
-    const createdItem = getRes.body.find(i => i.id === testItemId);
+    assert(Array.isArray(getRes.body.items), 'Should return items array');
+    assert(typeof getRes.body.totalPages === 'number', 'Should return totalPages');
+    const createdItem = getRes.body.items.find(i => i.id === testItemId);
     assert(createdItem, 'Item not found in list');
     assert.strictEqual(createdItem.location_id, testLocationId, 'Location ID missing in list');
     console.log('✓ Retrieved items with location_id\n');
