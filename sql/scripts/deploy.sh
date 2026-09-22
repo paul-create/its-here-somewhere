@@ -12,53 +12,53 @@ fi
 
 echo "RDS Instance: ${PROD_DB%%@*}@${PROD_DB##*@}"
 
-# Step 1: Create temp schema
-echo "Step 1: Creating temp schema in RDS..."
-psql "$PROD_DB" -c "DROP SCHEMA IF EXISTS _compare CASCADE;" 2>/dev/null || true
-psql "$PROD_DB" -c "CREATE SCHEMA _compare;"
+# Build the compare database connection string (swap its_here_somewhere for _compare_db)
+COMPARE_DB=$(echo "$PROD_DB" | sed 's/\/its_here_somewhere$/\/_compare_db/')
 
-# Step 2: Load schema files
-echo "Step 2: Loading schema files into _compare schema..."
+# Step 1: Create/recreate temp database
+echo "Step 1: Creating temp database in RDS..."
+psql "$PROD_DB" -c "DROP DATABASE IF EXISTS _compare_db;" 2>/dev/null || true
+psql "$PROD_DB" -c "CREATE DATABASE _compare_db;"
+
+# Step 2: Load schema files into compare database
+echo "Step 2: Loading schema files into _compare_db..."
 for schema_file in sql/schema/*.sql; do
   if [ -f "$schema_file" ]; then
-    # Replace 'public' with '_compare' in schema files
-    sed 's/CREATE SCHEMA IF NOT EXISTS public/CREATE SCHEMA IF NOT EXISTS _compare/g' "$schema_file" | psql "$PROD_DB" -q
+    psql "$COMPARE_DB" -q -f "$schema_file" 2>/dev/null || true
   fi
 done
 
-# Step 3: Load tables
-echo "Step 3: Loading tables into _compare..."
+# Step 3: Load tables into compare database
+echo "Step 3: Loading tables into _compare_db..."
 for table_file in sql/tables/*.sql; do
   if [ -f "$table_file" ]; then
     filename=$(basename "$table_file")
     echo "  Loading $filename..."
-    # Replace 'public.' with '_compare.' in table definitions
-    # Don't add IF NOT EXISTS - files already have it
-    sed 's/public\./\_compare\./g' "$table_file" | psql "$PROD_DB" -q 2>/dev/null || true
+    psql "$COMPARE_DB" -q -f "$table_file" 2>/dev/null || true
   fi
 done
 
-# Step 3b: Load deleted tables
-echo "Step 3b: Loading deleted tables into _compare..."
+# Step 3b: Load deleted tables into compare database
+echo "Step 3b: Loading deleted tables into _compare_db..."
 for table_file in sql/tables/_deleted/*.sql; do
   if [ -f "$table_file" ]; then
     filename=$(basename "$table_file")
     echo "  Loading _deleted/$filename..."
-    sed 's/public\./\_compare\./g' "$table_file" | psql "$PROD_DB" -q 2>/dev/null || true
+    psql "$COMPARE_DB" -q -f "$table_file" 2>/dev/null || true
   fi
 done
 
-# Step 4: Load procedures, functions, triggers
-echo "Step 4: Loading procedures, functions, triggers into _compare..."
+# Step 4: Load procedures, functions, triggers into compare database
+echo "Step 4: Loading procedures, functions, triggers into _compare_db..."
 for proc_file in sql/procedures/*.sql sql/functions/*.sql sql/triggers/*.sql; do
   if [ -f "$proc_file" ]; then
-    sed 's/public\./\_compare\./g' "$proc_file" | psql "$PROD_DB" -q 2>/dev/null || true
+    psql "$COMPARE_DB" -q -f "$proc_file" 2>/dev/null || true
   fi
 done
 
 # Step 5: Compare using migra
 echo "Step 5: Comparing production vs desired state..."
-MIGRA_OUTPUT=$(migra "$PROD_DB" "$(echo $PROD_DB | sed 's/\/its_here_somewhere/\/_compare/')" 2>&1) || true
+MIGRA_OUTPUT=$(migra "$PROD_DB" "$COMPARE_DB" 2>&1) || true
 
 if [ -n "$MIGRA_OUTPUT" ] && [ "$MIGRA_OUTPUT" != "-- no changes" ]; then
   echo "$MIGRA_OUTPUT" > sql/scripts/migration_delta.sql
@@ -74,9 +74,9 @@ else
   echo "" > sql/scripts/migration_delta.sql
 fi
 
-# Step 6: Cleanup
-echo "Step 6: Cleaning up temp schema..."
-psql "$PROD_DB" -c "DROP SCHEMA IF EXISTS _compare CASCADE;" -q 2>/dev/null || true
+# Step 6: Cleanup - drop temp database
+echo "Step 6: Cleaning up temp database..."
+psql "$PROD_DB" -c "DROP DATABASE IF EXISTS _compare_db;" -q 2>/dev/null || true
 
 echo ""
 echo "=== Deployment Complete ==="
