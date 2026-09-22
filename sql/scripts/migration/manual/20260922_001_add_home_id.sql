@@ -19,9 +19,8 @@ CREATE TABLE IF NOT EXISTS public.homes (
 
 -- Create default home for existing data
 -- All existing records will belong to this home
-INSERT INTO public.homes (id, name, home_code, created_by, created_at, updated_at)
-  VALUES ('00000000-0000-0000-0000-000000000001', 'Default Home', 'default-home-one', NULL, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.homes (id, name, home_code, created_at, updated_at)
+  VALUES ('00000000-0000-0000-0000-000000000001', 'Default Home', 'default-home-one', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
 
 -- ============================================================================
 -- STEP 2: Rebuild users table with home_id
