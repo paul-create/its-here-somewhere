@@ -6,9 +6,11 @@
 BEGIN;
 
 -- ============================================================================
--- STEP 1: Create homes table (if not exists)
+-- STEP 1: Create homes table
 -- ============================================================================
-CREATE TABLE IF NOT EXISTS public.homes (
+DROP TABLE IF EXISTS public.homes CASCADE;
+
+CREATE TABLE public.homes (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name VARCHAR(255) NOT NULL,
   home_code VARCHAR(50) UNIQUE NOT NULL,
@@ -70,9 +72,9 @@ CREATE TABLE public.categories (
   CONSTRAINT categories_created_by_fkey FOREIGN KEY (created_by) REFERENCES public.users(id)
 );
 
-INSERT INTO public.homes (id, name, home_code, created_at, updated_at)
-  VALUES ('00000000-0000-0000-0000-000000000001', 'Default Home', 'default-home-one', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-  ON CONFLICT (id) DO NOTHING;
+INSERT INTO public.categories (id, home_id, name, color, icon, created_by, created_at, updated_at)
+  SELECT id, '00000000-0000-0000-0000-000000000001', name, color, icon, created_by, created_at, updated_at
+  FROM categories_temp;
 
 DROP TABLE categories_temp;
 

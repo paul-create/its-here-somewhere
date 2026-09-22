@@ -33,8 +33,8 @@ for migration_file in $MIGRATIONS; do
   migration_name=$(basename "$migration_file")
   echo "Running: $migration_name"
   
-  # Execute the migration
-  if psql "$PROD_DB" -f "$migration_file"; then
+  # Execute the migration - fail on any SQL error
+  if psql "$PROD_DB" -v ON_ERROR_STOP=1 -f "$migration_file"; then
     echo "✓ Successfully applied: $migration_name"
     
     # Archive the migration
