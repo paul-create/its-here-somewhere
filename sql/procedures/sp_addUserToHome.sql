@@ -17,15 +17,16 @@ BEGIN
     RETURN;
   END IF;
 
-  -- Check if user already has a home assigned
-  IF EXISTS (SELECT 1 FROM users WHERE id = p_user_id AND home_id IS NOT NULL) THEN
+  -- Check if user already belongs to a home
+  IF EXISTS (SELECT 1 FROM user_homes WHERE user_id = p_user_id) THEN
     p_success := FALSE;
     p_message := 'User is already assigned to a home';
     RETURN;
   END IF;
 
-  -- Update user to add home_id
-  UPDATE users SET home_id = p_home_id WHERE id = p_user_id;
+  -- Insert user-home relationship
+  INSERT INTO user_homes (id, user_id, home_id) 
+  VALUES (gen_random_uuid(), p_user_id, p_home_id);
 
   p_success := TRUE;
   p_message := 'User added to home successfully';

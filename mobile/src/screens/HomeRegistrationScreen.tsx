@@ -10,7 +10,7 @@ export function HomeRegistrationScreen({ navigation }: any) {
   const [homeCode, setHomeCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
-  const { token } = useAuth();
+  const { token, loginWithHome } = useAuth();
 
   const handleCreateHome = async () => {
     setError(null);
@@ -44,6 +44,7 @@ export function HomeRegistrationScreen({ navigation }: any) {
         return;
       }
 
+      await loginWithHome(data.home_id);
       navigation.replace('Main');
     } catch (err: any) {
       setError(err.message || 'Failed to create home');
@@ -78,6 +79,7 @@ export function HomeRegistrationScreen({ navigation }: any) {
         return;
       }
 
+      await loginWithHome(data.home_id);
       navigation.replace('Main');
     } catch (err: any) {
       setError(err.message || 'Failed to join home');

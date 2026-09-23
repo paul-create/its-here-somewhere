@@ -4,6 +4,7 @@ interface AuthContextType {
   token: string | null;
   homeId: string | null;
   login: (email: string, password: string) => Promise<{ homeId: string | null }>;
+  loginWithHome: (homeId: string) => Promise<void>;
   logout: () => void;
   isLoading: boolean;
   error: string | null;
@@ -53,6 +54,10 @@ export function AuthProvider({ children }: any) {
     }
   };
 
+  const loginWithHome = async (homeId: string) => {
+    setHomeId(homeId);
+  };
+
   const logout = () => {
     setToken(null);
     setHomeId(null);  
@@ -60,7 +65,7 @@ export function AuthProvider({ children }: any) {
   };
 
   return (
-    <AuthContext.Provider value={{ token, homeId, login, logout, isLoading, error }}>
+    <AuthContext.Provider value={{ token, homeId, login, loginWithHome, logout, isLoading, error }}>
       {children}
     </AuthContext.Provider>
   );

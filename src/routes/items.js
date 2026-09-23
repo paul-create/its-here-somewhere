@@ -40,8 +40,8 @@ async function getVisibleItem(req, itemId) {
       'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [itemId, req.user.home_id, req.user.id]
     );
-    const activityCursorName = callResult.rows[0].result;
-    const result = await client.query(`FETCH ALL FROM "${activityCursorName}"`);
+    const itemCursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${itemCursorName}"`);
     await client.query('COMMIT');
     return result.rows.length ? withPhotoUrl(result.rows[0]) : null;
   } catch (err) {

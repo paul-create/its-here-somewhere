@@ -18,17 +18,17 @@ router.post('/signup', async (req, res) => {
     // Create user in Cognito
     const cognitoUserId = await createCognitoUser(email, password);
 
-    // Create user in PostgreSQL (home_id starts as NULL)
+    // Create user in PostgreSQL (no home assigned yet)
     const userId = randomUUID();
     await pool.query(
-      'INSERT INTO users (id, email, cognito_user_id, home_id, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [userId, email, cognitoUserId, null]
+      'INSERT INTO users (id, email, cognito_user_id, created_at) VALUES ($1, $2, $3, NOW())',
+      [userId, email, cognitoUserId]
     );
 
     res.status(201).json({ 
       message: 'User created', 
       userId,
-      homeId: null  // User hasn't created/joined a home yet
+      homeId: null  // User needs to create or join a home
     });
   } catch (err) {
     console.error(err);
@@ -48,8 +48,11 @@ router.post('/login', async (req, res) => {
     // Get token from Cognito
     const token = await loginUser(email, password);
 
-    // Get user from PostgreSQL (including home_id)
-    const result = await pool.query('SELECT id, home_id FROM users WHERE email = $1', [email]);
+    // Get user and their home from PostgreSQL
+    const result = await pool.query(
+      'SELECT u.id, uh.home_id FROM users u LEFT JOIN user_homes uh ON u.id = uh.user_id WHERE u.email = $1',
+      [email]
+    );
     const user = result.rows[0];
     
     if (!user) {
@@ -101,11 +104,13 @@ router.post('/create-home', authMiddleware, async (req, res) => {
     }
 
     // Check if user already has a home
-    const userCheck = await pool.query('SELECT home_id FROM users WHERE id = $1', [userId]);
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    if (userCheck.rows[0].home_id !== null) {
+    const homeCheckResult = await pool.query(
+      'CALL sp_userBelongsToHomeCheck($1::uuid)',
+      [userId]
+    );
+    const belongsToHome = homeCheckResult.rows[0].p_belongs;
+    
+    if (belongsToHome) {
       return res.status(400).json({ error: 'User already belongs to a home' });
     }
 
@@ -120,8 +125,15 @@ router.post('/create-home', authMiddleware, async (req, res) => {
 
     const procResult = result.rows[0];
 
-    // Update user's home_id
-    await pool.query('UPDATE users SET home_id = $1 WHERE id = $2', [procResult.p_home_id, userId]);
+    // Link user to home via stored procedure
+    const linkResult = await pool.query(
+      'CALL sp_linkUserToHome($1::uuid, $2::uuid)',
+      [userId, procResult.p_home_id]
+    );
+    
+    if (!linkResult.rows[0].p_success) {
+      return res.status(500).json({ error: linkResult.rows[0].p_message });
+    }
 
     res.status(201).json({
       home_id: procResult.p_home_id,
@@ -149,11 +161,13 @@ router.post('/join-home', authMiddleware, async (req, res) => {
     }
 
     // Check if user already has a home
-    const userCheck = await pool.query('SELECT home_id FROM users WHERE id = $1', [userId]);
-    if (userCheck.rows.length === 0) {
-      return res.status(404).json({ error: 'User not found' });
-    }
-    if (userCheck.rows[0].home_id !== null) {
+    const homeCheckResult = await pool.query(
+      'CALL sp_userBelongsToHomeCheck($1::uuid)',
+      [userId]
+    );
+    const belongsToHome = homeCheckResult.rows[0].p_belongs;
+    
+    if (belongsToHome) {
       return res.status(400).json({ error: 'User already belongs to a home' });
     }
 
