@@ -39,8 +39,8 @@ BEGIN
     RETURN;
   END IF;
 
-  INSERT INTO locations (home_id, name, parent_location_id, created_by, is_private, created_at, updated_at)
-  VALUES (p_home_id, p_name, p_parent_location_id, p_user_id, COALESCE(p_is_private, false), NOW(), NOW())
+  INSERT INTO locations (id, home_id, name, parent_location_id, created_by, is_private, created_at, updated_at)
+  VALUES (gen_random_uuid(), p_home_id, p_name, p_parent_location_id, p_user_id, COALESCE(p_is_private, false), NOW(), NOW())
   RETURNING id INTO p_location_id;
 
   p_message := 'Location created';

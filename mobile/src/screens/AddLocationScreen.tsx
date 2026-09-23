@@ -33,7 +33,8 @@ export function AddLocationScreen({ navigation }: any) {
       });
 
       if (!response.ok) {
-        throw new Error('Failed to create location');
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to create location');
       }
 
       navigation.goBack();

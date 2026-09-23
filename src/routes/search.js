@@ -16,10 +16,11 @@ router.get('/items', authMiddleware, requireHome, async (req, res) => {
 
     await client.query('BEGIN');
     await client.query(
-      'CALL sp_searchItems($1::uuid, $2::uuid, $3::varchar)',
+      'CALL sp_searchItems($1::uuid, $2::uuid, $3::varchar, NULL::refcursor)',
       [req.user.home_id, req.user.id, q.trim()]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
 
     res.json(result.rows);
@@ -43,10 +44,11 @@ router.get('/categories', authMiddleware, requireHome, async (req, res) => {
 
     await client.query('BEGIN');
     await client.query(
-      'CALL sp_searchCategories($1::uuid, $2::uuid, $3::varchar)',
+      'CALL sp_searchCategories($1::uuid, $2::uuid, $3::varchar, NULL::refcursor)',
       [req.user.home_id, req.user.id, q.trim()]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
 
     res.json(result.rows);
@@ -70,10 +72,11 @@ router.get('/locations', authMiddleware, requireHome, async (req, res) => {
 
     await client.query('BEGIN');
     await client.query(
-      'CALL sp_searchLocations($1::uuid, $2::uuid, $3::varchar)',
+      'CALL sp_searchLocations($1::uuid, $2::uuid, $3::varchar, NULL::refcursor)',
       [req.user.home_id, req.user.id, q.trim()]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
 
     res.json(result.rows);

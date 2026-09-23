@@ -54,23 +54,21 @@ export function HomeScreen({ navigation }: any) {
     page: number,
     pageSize: number
   ): Promise<ItemsPage> => {
-    console.log('Fetching items with homeId:', homeId, 'token:', token ? 'present' : 'missing');
     
     const url = `${API}/items?visibility=${visibility}&page=${page + 1}&pageSize=${pageSize}&home_id=${homeId}`;
-    console.log('URL:', url);
     
     const res = await fetch(url, {
       headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
     });
     
-    console.log('Response status:', res.status);
-    
     if (!res.ok) {
       const errText = await res.text();
-      console.log('Error response:', errText);
       throw new Error('Could not load your items. Pull down to try again.');
     }
-    return res.json();
+
+    const data = await res.json();
+
+    return data;
   };
 
   const loadPublicPage = async (page: number) => {
@@ -90,6 +88,7 @@ export function HomeScreen({ navigation }: any) {
 
   const loadPrivateItems = async () => {
     const data = await fetchItemsPage('private', 0, PRIVATE_LIMIT);
+    
     setPrivateItems(data.items);
     setPrivateTotal(data.total);
   };
@@ -150,7 +149,7 @@ export function HomeScreen({ navigation }: any) {
       >
         <View style={styles.itemImagePlaceholder}>
           {item.photo_url ? (
-            <Image source={{ uri: item.photo_url }} style={styles.itemImage} />
+            <Image source={{ uri: item.photo_url }} style={styles.itemImage} onError={(error) => console.log('Image load error:', error.nativeEvent.error)}/>
           ) : (
             <MaterialCommunityIcons name="package-variant" size={40} color="#cccccc" />
           )}

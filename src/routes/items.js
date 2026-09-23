@@ -36,11 +36,12 @@ async function getVisibleItem(req, itemId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid)',
+    const callResult = await client.query(
+      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [itemId, req.user.home_id, req.user.id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const activityCursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${activityCursorName}"`);
     await client.query('COMMIT');
     return result.rows.length ? withPhotoUrl(result.rows[0]) : null;
   } catch (err) {
@@ -76,7 +77,7 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_createItem($1::uuid, $2::uuid, $3::varchar, $4::text, $5::integer, $6::uuid, $7::uuid)',
+      'CALL sp_createItem($1::uuid, $2::uuid, $3::varchar, $4::text, $5::integer, $6::uuid, $7::uuid, NULL::varchar, NULL::varchar, NULL::uuid)',
       [
         req.user.home_id,
         category_id,
@@ -128,14 +129,6 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
       pageSize,
       (page - 1) * pageSize
     ];
-    
-    console.log('DEBUG sp_getAllItems params:');
-    console.log('  [0] home_id:', params[0], 'type:', typeof params[0]);
-    console.log('  [1] user_id:', params[1], 'type:', typeof params[1]);
-    console.log('  [2] category_id:', params[2], 'type:', typeof params[2]);
-    console.log('  [3] is_private:', params[3], 'type:', typeof params[3]);
-    console.log('  [4] page_size:', params[4], 'type:', typeof params[4]);
-    console.log('  [5] offset:', params[5], 'type:', typeof params[5]);
 
     await client.query('BEGIN');
     const callResult = await client.query(
@@ -143,7 +136,6 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
       params
     );
     const cursorName = callResult.rows[0].result;
-    console.log('DEBUG: cursor name:', cursorName);
     const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
 
@@ -309,11 +301,12 @@ router.get('/:id/activity', authMiddleware, requireHome, async (req, res) => {
 
     // Visibility check first, so private items' history stays private
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid)',
+    const callResult = await client.query(
+      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [id, req.user.home_id, req.user.id]
     );
-    let found = await client.query('FETCH ALL FROM result');
+    const itemCursorName = callResult.rows[0].result;
+    let found = await client.query(`FETCH ALL FROM "${itemCursorName}"`);
     if (found.rows.length === 0) {
       await client.query('COMMIT');
       client.release();
@@ -322,11 +315,12 @@ router.get('/:id/activity', authMiddleware, requireHome, async (req, res) => {
     await client.query('COMMIT');
 
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getActivityLog($1::uuid, $2::uuid)',
+    const callResult2 = await client.query(
+      'CALL sp_getActivityLog($1::uuid, $2::uuid, NULL::refcursor)',
       [id, req.user.home_id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult2.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
 
     res.json(result.rows);

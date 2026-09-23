@@ -45,15 +45,15 @@ router.post('/', authMiddleware, requireHome, upload.single('file'), async (req,
     // Store photo metadata
     const photoId = randomUUID();
     await pool.query(
-      'INSERT INTO photos (id, item_id, s3_key, uploaded_by, created_at) VALUES ($1, $2, $3, $4, NOW())',
-      [photoId, itemId, s3Key, req.user.id]
+      'INSERT INTO photos (id, home_id, item_id, s3_key, uploaded_by, created_at) VALUES ($1, $2, $3, $4, $5, NOW())',
+      [photoId, req.user.home_id, itemId, s3Key, req.user.id]
     );
 
     // Store auto-generated tags
     for (const tagName of tags) {
       await pool.query(
-        'INSERT INTO tags (photo_id, tag_name, is_auto_generated) VALUES ($1, $2, true) ON CONFLICT DO NOTHING',
-        [photoId, tagName.toLowerCase()]
+        'INSERT INTO tags (id, photo_id, tag_name, is_auto_generated) VALUES ($1, $2, $3, $4)',
+        [randomUUID(), photoId, tagName.toLowerCase(), true]
       );
     }
 
@@ -73,11 +73,12 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getAllPhotos($1::uuid, $2::uuid)',
+    const callResult = await client.query(
+      'CALL sp_getAllPhotos($1::uuid, $2::uuid, NULL::refcursor)',
       [req.user.home_id, req.user.id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
 
     // Generate signed URLs for each photo
@@ -92,7 +93,7 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
         created_at: row.created_at
       };
     }));
-
+    
     res.json(photos);
   } catch (err) {
     await client.query('ROLLBACK').catch(() => {});

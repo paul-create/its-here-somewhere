@@ -14,10 +14,11 @@ async function getVisibleLocation(req, locationId) {
   try {
     await client.query('BEGIN');
     await client.query(
-      'CALL sp_getLocationByID($1::uuid, $2::uuid, $3::uuid)',
+      'CALL sp_getLocationByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [locationId, req.user.home_id, req.user.id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
     return result.rows[0] || null;
   } catch (err) {
@@ -35,11 +36,12 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getAllLocations($1::uuid, $2::uuid)',
+    const callResult = await client.query(
+      'CALL sp_getAllLocations($1::uuid, $2::uuid, NULL::refcursor)',
       [req.user.home_id, req.user.id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
     res.json(result.rows);
   } catch (err) {
@@ -72,7 +74,7 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_createLocation($1::uuid, $2::varchar, $3::uuid, $4::boolean, $5::uuid)',
+      'CALL sp_createLocation($1::uuid, $2::varchar, $3::uuid, $4::boolean, $5::uuid, NULL::varchar, NULL::varchar, NULL::uuid)',
       [
         req.user.home_id,
         name.trim(),

@@ -129,6 +129,9 @@ export function AddScreen({ navigation }: any) {
   };
 
   const handleAddItem = async () => {
+    if (isLoading || isUploading) {
+      return;  // Prevent double-tap
+    }
     if (!name.trim()) {
       setError('Item name is required');
       return;

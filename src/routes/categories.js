@@ -13,11 +13,12 @@ async function getVisibleCategory(req, categoryId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getCategoryByID($1::uuid, $2::uuid, $3::uuid)',
+    const callResult = await client.query(
+      'CALL sp_getCategoryByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [categoryId, req.user.home_id, req.user.id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
     return result.rows[0] || null;
   } catch (err) {
@@ -35,11 +36,12 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getAllCategories($1::uuid, $2::uuid)',
+    const callResult = await client.query(
+      'CALL sp_getAllCategories($1::uuid, $2::uuid, NULL::refcursor)',
       [req.user.home_id, req.user.id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
     await client.query('COMMIT');
     res.json(result.rows);
   } catch (err) {
@@ -69,7 +71,7 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_createCategory($1::uuid, $2::varchar, $3::boolean, $4::uuid)',
+      'CALL sp_createCategory($1::uuid, $2::varchar, $3::boolean, $4::uuid, NULL::varchar, NULL::varchar, NULL::uuid)',
       [
         req.user.home_id,
         name.trim(),

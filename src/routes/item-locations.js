@@ -40,11 +40,12 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
 
     // Verify item exists and user can access it first
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid)',
+    const itemCallResult = await client.query(
+      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [itemId, req.user.home_id, req.user.id]
     );
-    let found = await client.query('FETCH ALL FROM result');
+    const itemCursorName = itemCallResult.rows[0].result;
+    let found = await client.query(`FETCH ALL FROM "${itemCursorName}"`);
     if (found.rows.length === 0) {
       await client.query('COMMIT');
       client.release();
@@ -54,11 +55,12 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
 
     // Get activity log
     await client.query('BEGIN');
-    await client.query(
-      'CALL sp_getActivityLog($1::uuid, $2::uuid)',
+    const activityCallResult = await client.query(
+      'CALL sp_getActivityLog($1::uuid, $2::uuid, NULL::refcursor)',
       [itemId, req.user.home_id]
     );
-    const result = await client.query('FETCH ALL FROM result');
+    const activityCursorName = activityCallResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${activityCursorName}"`);
     await client.query('COMMIT');
 
     res.json(result.rows);

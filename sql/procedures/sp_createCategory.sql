@@ -23,8 +23,8 @@ BEGIN
     RETURN;
   END IF;
 
-  INSERT INTO categories (home_id, name, created_by, is_private, created_at, updated_at)
-  VALUES (p_home_id, p_name, p_user_id, COALESCE(p_is_private, false), NOW(), NOW())
+  INSERT INTO categories (id, home_id, name, created_by, is_private, created_at, updated_at)
+  VALUES (gen_random_uuid(), p_home_id, p_name, p_user_id, COALESCE(p_is_private, false), NOW(), NOW())
   RETURNING id INTO p_category_id;
 
   p_message := 'Category created';
