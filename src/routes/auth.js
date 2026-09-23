@@ -19,14 +19,18 @@ router.post('/signup', async (req, res) => {
     // Create user in Cognito
     const cognitoUserId = await createCognitoUser(email, password);
 
-    // Create user in PostgreSQL
+    // Create user in PostgreSQL (home_id starts as NULL)
     const userId = randomUUID();
     await pool.query(
-      'INSERT INTO users (id, email, cognito_user_id, created_at) VALUES ($1, $2, $3, NOW())',
-      [userId, email, cognitoUserId]
+      'INSERT INTO users (id, email, cognito_user_id, home_id, created_at) VALUES ($1, $2, $3, $4, NOW())',
+      [userId, email, cognitoUserId, null]
     );
 
-    res.status(201).json({ message: 'User created', userId });
+    res.status(201).json({ 
+      message: 'User created', 
+      userId,
+      homeId: null  // User hasn't created/joined a home yet
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });
@@ -45,11 +49,19 @@ router.post('/login', async (req, res) => {
     // Get token from Cognito
     const token = await loginUser(email, password);
 
-    // Get user from PostgreSQL
-    const result = await pool.query('SELECT id FROM users WHERE email = $1', [email]);
-    const userId = result.rows[0]?.id;
+    // Get user from PostgreSQL (including home_id)
+    const result = await pool.query('SELECT id, home_id FROM users WHERE email = $1', [email]);
+    const user = result.rows[0];
+    
+    if (!user) {
+      return res.status(401).json({ error: 'User not found' });
+    }
 
-    res.json({ token, userId });
+    res.json({ 
+      token, 
+      userId: user.id,
+      homeId: user.home_id  // null if user hasn't created/joined a home yet
+    });
   } catch (err) {
     console.error(err);
     res.status(401).json({ error: err.message });
