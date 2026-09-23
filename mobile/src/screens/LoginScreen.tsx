@@ -13,8 +13,13 @@ export function LoginScreen({ navigation, route }: any) {
 
   const handleLogin = async () => {
     try {
-      await login(email, password);
-      navigation.replace('Main');
+      const loginResult = await login(email, password);
+      // Check if homeId exists - if null, user needs to create/join a home
+      if (loginResult?.homeId === null) {
+        navigation.replace('HomeRegistration');
+      } else {
+        navigation.replace('Main');
+      }
     } catch (err) {
       // Error is already set in context
     }

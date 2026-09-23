@@ -2,7 +2,8 @@ import React, { createContext, useState } from 'react';
 
 interface AuthContextType {
   token: string | null;
-  login: (email: string, password: string) => Promise<void>;
+  homeId: string | null;
+  login: (email: string, password: string) => Promise<{ homeId: string | null }>;
   logout: () => void;
   isLoading: boolean;
   error: string | null;
@@ -12,6 +13,7 @@ export const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
 export function AuthProvider({ children }: any) {
   const [token, setToken] = useState<string | null>(null);
+  const [homeId, setHomeId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -39,6 +41,9 @@ export function AuthProvider({ children }: any) {
       console.log('Login successful');
       
       setToken(data.token);
+      setHomeId(data.homeId || null);
+
+      return { homeId: data.homeId || null };
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Login failed';
       setError(errorMsg);
@@ -50,11 +55,12 @@ export function AuthProvider({ children }: any) {
 
   const logout = () => {
     setToken(null);
+    setHomeId(null);  
     setError(null);
   };
 
   return (
-    <AuthContext.Provider value={{ token, login, logout, isLoading, error }}>
+    <AuthContext.Provider value={{ token, homeId, login, logout, isLoading, error }}>
       {children}
     </AuthContext.Provider>
   );

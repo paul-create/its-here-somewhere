@@ -79,7 +79,7 @@ export function SignupScreen({ navigation }: any) {
       }
 
       // Navigate to Main
-      navigation.replace('Main');
+      navigation.replace('HomeRegistration');
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Signup failed';
       // Hide backend details from user
