@@ -1,88 +1,88 @@
+require('dotenv').config();
+require('dotenv').config({ path: require('path').resolve(__dirname, '../.env') });
 const { runAuthTests } = require('./auth.test');
 const { runCategoryTests } = require('./categories.test');
-const { runItemTests } = require('./items.test');
 const { runLocationTests } = require('./locations.test');
+const { runItemTests } = require('./items.test');
 const { runItemLocationsTests } = require('./item-locations.test');
-const { runPhotoTests, runPhotoUploadTest } = require('./photos.test');
+const { runPhotoTests } = require('./photos.test');
 const { runSearchTests } = require('./search.test');
-const { cleanup, resetTracker } = require('./helpers');
+const { cleanup } = require('./helpers');
 
-const tests = {
-  auth: { fn: runAuthTests, requiresAuth: false },
-  categories: { fn: runCategoryTests, requiresAuth: true },
-  items: { fn: runItemTests, requiresAuth: true },
-  locations: { fn: runLocationTests, requiresAuth: true },
-  'item-locations': { fn: runItemLocationsTests, requiresAuth: true },
-  photos: { 
-    fn: async (token) => {
-      try {
-        await runPhotoTests(token);
-        await runPhotoUploadTest(token);
-      } finally {
-        await cleanup();
+const TESTS = [
+  { name: 'Auth', fn: runAuthTests },
+  { name: 'Categories', fn: runCategoryTests },
+  { name: 'Locations', fn: runLocationTests },
+  { name: 'Items', fn: runItemTests },
+  { name: 'Item Locations', fn: runItemLocationsTests },
+  { name: 'Photos', fn: runPhotoTests },
+  { name: 'Search', fn: runSearchTests }
+];
+
+async function runAllTests() {
+  const results = {
+    passed: [],
+    failed: [],
+    startTime: Date.now()
+  };
+
+  console.log('===============================================');
+  console.log('Running It\'s Here Somewhere Test Suite');
+  console.log('===============================================\n');
+
+  let authResult = null;
+
+  for (const test of TESTS) {
+    console.log(`\n>>> Running ${test.name} Tests <<<\n`);
+    try {
+      if (test.name === 'Auth') {
+        // Auth returns { token, homeId }
+        authResult = await test.fn();
+        console.log('DEBUG in run-all.js: authResult after Auth =', authResult);
+      } else {
+        // All other tests use the token/homeId from auth
+        await test.fn(authResult);
       }
-    }, 
-    requiresAuth: true 
-  },
-  search: { fn: runSearchTests, requiresAuth: true },
-};
-
-async function runAll() {
-  try {
-    let selectedTests = process.argv.slice(2);
-    
-    if (selectedTests.length === 0) {
-      selectedTests = Object.keys(tests);
+      results.passed.push(test.name);
+      console.log(`\n✓ ${test.name} tests completed\n`);
+    } catch (err) {
+      results.failed.push({ test: test.name, error: err.message });
+      console.error(`\n✗ ${test.name} tests failed: ${err.message}\n`);
     }
-
-    let token = null;
-    const startTime = Date.now();
-
-    // If any selected test requires auth, run auth first
-    const needsAuth = selectedTests.some(name => tests[name]?.requiresAuth);
-    if (needsAuth && !selectedTests.includes('auth')) {
-      console.log('\n--- Running Auth (required for other tests) ---\n');
-      token = await tests.auth.fn();
-      await cleanup();
-      resetTracker();
-    }
-
-    // Run selected tests
-    for (const testName of selectedTests) {
-      const test = tests[testName];
-      if (!test) {
-        console.error(`Unknown test: ${testName}`);
-        continue;
-      }
-
-      resetTracker();
-      console.log(`\n--- Running ${testName} ---\n`);
-
-      try {
-        if (test.requiresAuth && !token) {
-          token = await test.fn();
-        } else if (test.requiresAuth) {
-          await test.fn(token);
-        } else {
-          await test.fn();
-        }
-        
-        // Cleanup after each test
-        await cleanup();
-      } catch (err) {
-        console.error(`Test ${testName} failed:`, err.message);
-        await cleanup();
-        throw err;
-      }
-    }
-
-    const duration = ((Date.now() - startTime) / 1000).toFixed(2);
-    console.log(`\n✓ All tests passed in ${duration}s`);
-    process.exit(0);
-  } catch (err) {
-    console.error('Tests failed:', err.message);
-    process.exit(1);
   }
+
+  // Cleanup after all tests
+  console.log('\n\n===============================================');
+  console.log('Cleanup Phase');
+  console.log('===============================================');
+  await cleanup();
+
+  // Print summary
+  console.log('\n\n===============================================');
+  console.log('Test Results Summary');
+  console.log('===============================================');
+  console.log(`Total tests: ${TESTS.length}`);
+  console.log(`Passed: ${results.passed.length}`);
+  console.log(`Failed: ${results.failed.length}`);
+  
+  if (results.passed.length > 0) {
+    console.log('\nPassed:');
+    results.passed.forEach(name => console.log(`  ✓ ${name}`));
+  }
+
+  if (results.failed.length > 0) {
+    console.log('\nFailed:');
+    results.failed.forEach(({ test, error }) => console.log(`  ✗ ${test}: ${error}`));
+  }
+
+  const duration = ((Date.now() - results.startTime) / 1000).toFixed(2);
+  console.log(`\nTotal time: ${duration}s`);
+  console.log('===============================================\n');
+
+  process.exit(results.failed.length > 0 ? 1 : 0);
 }
 
-runAll();
+runAllTests().catch(err => {
+  console.error('Fatal error:', err);
+  process.exit(1);
+});

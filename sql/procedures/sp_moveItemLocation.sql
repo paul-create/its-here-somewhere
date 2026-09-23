@@ -10,7 +10,7 @@ LANGUAGE plpgsql
 AS $$
 DECLARE
   v_old_location_id UUID;
-  v_old_location_name VARCHAR;
+  v_old_location_name VARCHAR := 'None';
   v_new_location_name VARCHAR;
 BEGIN
   -- Anyone in the home who can see the item can move it
@@ -58,11 +58,11 @@ BEGIN
     v_old_location_name := 'None';
   END IF;
 
-  INSERT INTO item_locations (home_id, item_id, location_id, moved_by, stored_at, created_at)
-  VALUES (p_home_id, p_item_id, p_location_id, p_user_id, NOW(), NOW());
+  INSERT INTO item_locations (id, home_id, item_id, location_id, moved_by, stored_at, created_at)
+  VALUES (gen_random_uuid(), p_home_id, p_item_id, p_location_id, p_user_id, NOW(), NOW());
 
-  INSERT INTO activity_log (home_id, item_id, changed_by, changed_at, property, old_value, new_value, created_at)
-  VALUES (p_home_id, p_item_id, p_user_id, NOW(), 'Location', v_old_location_name, v_new_location_name, NOW());
+  INSERT INTO activity_log (id, home_id, item_id, changed_by, changed_at, property, old_value, new_value, created_at)
+  VALUES (gen_random_uuid(), p_home_id, p_item_id, p_user_id, NOW(), 'Location', v_old_location_name, v_new_location_name, NOW());
 
   p_message := 'Item moved';
 END;

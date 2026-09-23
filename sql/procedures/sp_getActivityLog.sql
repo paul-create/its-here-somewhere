@@ -9,6 +9,7 @@ BEGIN
   OPEN result FOR
   SELECT 
     id,
+    item_id,
     property,
     old_value,
     new_value,

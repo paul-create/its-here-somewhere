@@ -1,7 +1,7 @@
 CREATE TABLE IF NOT EXISTS activity_log (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   home_id UUID NOT NULL REFERENCES homes(id),
-  item_id UUID NOT NULL REFERENCES items(id),
+  item_id UUID REFERENCES items(id),
   changed_by UUID NOT NULL REFERENCES users(id),
   changed_at TIMESTAMP DEFAULT NOW(),
   property VARCHAR(50) NOT NULL,

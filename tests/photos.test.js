@@ -19,10 +19,10 @@ function calculateRecall(predicted, expected) {
   return correct / expected.length;
 }
 
-async function runPhotoTests(token) {
+async function runPhotoTests(authResult) {
   console.log('Starting photo tagging tests...\n');
   
-  setToken(token);
+  setToken(authResult.token);
   const timestamp = Date.now();
   let results = [];
 
@@ -104,10 +104,10 @@ async function runPhotoTests(token) {
   }
 }
 
-async function runPhotoUploadTest(token) {
+async function runPhotoUploadTest(authResult) {
   console.log('\nStarting photo upload endpoint test...\n');
   
-  setToken(token);
+  setToken(authResult.token);
   const timestamp = Date.now();
 
   try {

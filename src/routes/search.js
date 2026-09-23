@@ -15,7 +15,7 @@ router.get('/items', authMiddleware, requireHome, async (req, res) => {
     }
 
     await client.query('BEGIN');
-    await client.query(
+    const callResult = await client.query(
       'CALL sp_searchItems($1::uuid, $2::uuid, $3::varchar, NULL::refcursor)',
       [req.user.home_id, req.user.id, q.trim()]
     );
@@ -43,7 +43,7 @@ router.get('/categories', authMiddleware, requireHome, async (req, res) => {
     }
 
     await client.query('BEGIN');
-    await client.query(
+    const callResult = await client.query(
       'CALL sp_searchCategories($1::uuid, $2::uuid, $3::varchar, NULL::refcursor)',
       [req.user.home_id, req.user.id, q.trim()]
     );
@@ -71,7 +71,7 @@ router.get('/locations', authMiddleware, requireHome, async (req, res) => {
     }
 
     await client.query('BEGIN');
-    await client.query(
+    const callResult = await client.query(
       'CALL sp_searchLocations($1::uuid, $2::uuid, $3::varchar, NULL::refcursor)',
       [req.user.home_id, req.user.id, q.trim()]
     );

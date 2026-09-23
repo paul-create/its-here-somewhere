@@ -25,7 +25,11 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
     const procResult = result.rows[0];
     if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    res.status(201).json({ message: procResult.p_message });
+    res.status(201).json({ 
+      message: procResult.p_message,
+      item_id: itemId,
+      location_id: location_id
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: err.message });

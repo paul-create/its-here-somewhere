@@ -1,11 +1,18 @@
+require('dotenv').config();
 const Anthropic = require('@anthropic-ai/sdk');
-
-const client = new Anthropic({
-  apiKey: process.env.CLAUDE_API_KEY
-});
 
 async function tagPhoto(imageDataUrl, mimeType = 'image/jpeg') {
   try {
+    const apiKey = process.env.CLAUDE_API_KEY;
+    
+    if (!apiKey) {
+      throw new Error('CLAUDE_API_KEY environment variable not set');
+    }
+
+    const client = new Anthropic({
+      apiKey: apiKey
+    });
+
     if (!imageDataUrl) {
       console.error('imageDataUrl is undefined or null');
       throw new Error('imageDataUrl required');

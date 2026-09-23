@@ -160,7 +160,7 @@ router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_softDeleteLocation($1::uuid, $2::uuid, $3::uuid)',
+      'CALL sp_softDeleteLocation($1::uuid, $2::uuid, $3::uuid, NULL::varchar, NULL::varchar)',
       [id, req.user.home_id, req.user.id]
     );
 

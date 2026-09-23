@@ -1,9 +1,9 @@
 const { request, setToken, assert, trackItem } = require('./helpers');
 
-async function runLocationTests(token) {
+async function runLocationTests(authResult) {
   console.log('Starting location tests...\n');
   
-  setToken(token);
+  setToken(authResult.token);
   const timestamp = Date.now();
   let testLocationId = null;
 
@@ -39,8 +39,7 @@ async function runLocationTests(token) {
     // 4. PUT location
     console.log('4. Testing PUT /api/locations/:id');
     const putRes = await request('PUT', `/api/locations/${testLocationId}`, {
-      name: `Kitchen Updated-${timestamp}`,
-      is_private: false
+      name: `Kitchen Updated-${timestamp}`
     });
     assert.strictEqual(putRes.status, 200, `PUT failed`);
     console.log('✓ Updated location\n');

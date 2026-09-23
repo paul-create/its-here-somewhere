@@ -1,9 +1,9 @@
 const { request, setToken, assert, trackItem } = require('./helpers');
 
-async function runItemLocationsTests(token) {
+async function runItemLocationsTests(authResult) {
   console.log('Starting item locations tests...\n');
   
-  setToken(token);
+  setToken(authResult.token);
   const timestamp = Date.now();
   let testItemId = null;
   let testLocationId = null;
@@ -15,33 +15,42 @@ async function runItemLocationsTests(token) {
       is_private: false
     });
     const categoryId = catRes.body.id;
-    trackItem('categories', categoryId);  // TRACK IT
+    trackItem('categories', categoryId);
 
-    // Setup: create item
-    const itemRes = await request('POST', '/api/items', {
-      name: 'Test Item',
-      category_id: categoryId,
-      quantity: 1
-    });
-    testItemId = itemRes.body.id;
-    trackItem('items', testItemId);  // TRACK IT
-
-    // Setup: create location
+    // Setup: create location 1
     const locRes = await request('POST', '/api/locations', {
       name: `TestLoc-${timestamp}`,
       is_private: false
     });
     testLocationId = locRes.body.id;
-    trackItem('locations', testLocationId);  // TRACK IT
+    trackItem('locations', testLocationId);
 
-    // 1. POST item to location
+    // Setup: create location 2
+    const loc2Res = await request('POST', '/api/locations', {
+      name: `TestLoc2-${timestamp}`,
+      is_private: false
+    });
+    const location2Id = loc2Res.body.id;
+    trackItem('locations', location2Id);
+
+    // Setup: create item in location 1
+    const itemRes = await request('POST', '/api/items', {
+      name: 'Test Item',
+      category_id: categoryId,
+      location_id: testLocationId,
+      quantity: 1
+    });
+    testItemId = itemRes.body.id;
+    trackItem('items', testItemId);
+
+    // 1. POST item to location 2
     console.log('1. Testing POST /api/items/:id/locations');
     const moveRes = await request('POST', `/api/items/${testItemId}/locations`, {
-      location_id: testLocationId
+      location_id: location2Id
     });
     assert.strictEqual(moveRes.status, 201, `POST failed with status ${moveRes.status}`);
     assert.strictEqual(moveRes.body.item_id, testItemId, 'Wrong item ID');
-    assert.strictEqual(moveRes.body.location_id, testLocationId, 'Wrong location ID');
+    assert.strictEqual(moveRes.body.location_id, location2Id, 'Wrong location ID');
     console.log('✓ Recorded item move to location\n');
 
     // 2. GET item history
@@ -50,27 +59,20 @@ async function runItemLocationsTests(token) {
     assert.strictEqual(historyRes.status, 200, `GET failed with status ${historyRes.status}`);
     assert(Array.isArray(historyRes.body), 'Should return array');
     assert(historyRes.body.length > 0, 'Should have at least one history entry');
-    assert.strictEqual(historyRes.body[0].item_id, testItemId, 'Wrong item in history');
-    assert.strictEqual(historyRes.body[0].location_name, `TestLoc-${timestamp}`, 'Wrong location name in history');
+    assert.strictEqual(historyRes.body[0].new_value, `TestLoc2-${timestamp}`, 'Wrong location name in history');
     console.log('✓ Retrieved item location history\n');
 
-    // 3. Move item to second location and verify history
+    // 3. Move item back to location 1 and verify history
     console.log('3. Testing multiple location history entries');
-    const loc2Res = await request('POST', '/api/locations', {
-      name: `TestLoc2-${timestamp}`,
-      is_private: false
-    });
-    const location2Id = loc2Res.body.id;
-    trackItem('locations', location2Id);  // TRACK IT
-
     const move2Res = await request('POST', `/api/items/${testItemId}/locations`, {
-      location_id: location2Id
+      location_id: testLocationId
     });
     assert.strictEqual(move2Res.status, 201, 'Second move failed');
 
     const history2Res = await request('GET', `/api/items/${testItemId}/locations`);
-    assert.strictEqual(history2Res.body.length, 2, 'Should have 2 history entries');
-    assert.strictEqual(history2Res.body[0].location_name, `TestLoc2-${timestamp}`, 'Most recent should be second location');
+    const locationHistoryOnly = history2Res.body.filter(h => h.property === 'Location');
+    assert.strictEqual(locationHistoryOnly.length, 3, 'Should have 3 location history entries');
+    assert.strictEqual(locationHistoryOnly[0].new_value, `TestLoc-${timestamp}`, 'Most recent should be location 1');
     console.log('✓ History shows multiple moves in reverse order\n');
 
     console.log('Item locations tests passed!');

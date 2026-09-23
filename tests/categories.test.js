@@ -1,9 +1,9 @@
 const { request, setToken, assert, trackItem } = require('./helpers');
 
-async function runCategoryTests(token) {
+async function runCategoryTests(authResult) {
   console.log('Starting category tests...\n');
   
-  setToken(token);
+  setToken(authResult.token);
   const timestamp = Date.now();
   let testCategoryId = null;
 
