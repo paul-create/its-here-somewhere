@@ -20,8 +20,7 @@ BEGIN
   SELECT category_id INTO v_old_category_id
   FROM items
   WHERE id = p_item_id
-    AND home_id = p_home_id
-    AND created_by = p_user_id;
+    AND home_id = p_home_id;
 
   IF NOT FOUND THEN
     p_error_code := 'NOT_FOUND';

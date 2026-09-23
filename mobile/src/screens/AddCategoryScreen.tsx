@@ -114,8 +114,6 @@ const styles = StyleSheet.create({
   },
   form: {
     padding: 24,
-    justifyContent: 'center',
-    minHeight: '100%',
   },
   title: {
     fontSize: 24,

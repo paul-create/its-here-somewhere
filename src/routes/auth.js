@@ -105,7 +105,7 @@ router.post('/create-home', authMiddleware, async (req, res) => {
 
     // Check if user already has a home
     const homeCheckResult = await pool.query(
-      'CALL sp_userBelongsToHomeCheck($1::uuid)',
+      'CALL sp_userBelongsToHomeCheck($1::uuid, NULL::boolean)',
       [userId]
     );
     const belongsToHome = homeCheckResult.rows[0].p_belongs;
@@ -119,7 +119,7 @@ router.post('/create-home', authMiddleware, async (req, res) => {
 
     // Create home via stored procedure
     const result = await pool.query(
-      'CALL sp_createHome($1::varchar, $2::varchar, $3::uuid)',
+      'CALL sp_createHome($1::varchar, $2::varchar, $3::uuid, NULL::uuid, NULL::varchar)',
       [name.trim(), homeCode, userId]
     );
 
@@ -127,7 +127,7 @@ router.post('/create-home', authMiddleware, async (req, res) => {
 
     // Link user to home via stored procedure
     const linkResult = await pool.query(
-      'CALL sp_linkUserToHome($1::uuid, $2::uuid)',
+      'CALL sp_linkUserToHome($1::uuid, $2::uuid, NULL::boolean, NULL::varchar)',
       [userId, procResult.p_home_id]
     );
     
@@ -162,7 +162,7 @@ router.post('/join-home', authMiddleware, async (req, res) => {
 
     // Check if user already has a home
     const homeCheckResult = await pool.query(
-      'CALL sp_userBelongsToHomeCheck($1::uuid)',
+      'CALL sp_userBelongsToHomeCheck($1::uuid, NULL::boolean)',
       [userId]
     );
     const belongsToHome = homeCheckResult.rows[0].p_belongs;
@@ -173,7 +173,7 @@ router.post('/join-home', authMiddleware, async (req, res) => {
 
     // Join home via stored procedure
     const result = await pool.query(
-      'CALL sp_addUserToHome($1::varchar, $2::uuid)',
+      'CALL sp_addUserToHome($1::varchar, $2::uuid, NULL::boolean, NULL::varchar, NULL::uuid)',
       [home_code.trim(), userId]
     );
 

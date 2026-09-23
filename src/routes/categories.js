@@ -115,7 +115,7 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_updateCategory($1::uuid, $2::uuid, $3::uuid, $4::varchar)',
+      'CALL sp_updateCategory($1::uuid, $2::uuid, $3::uuid, $4::varchar, NULL::varchar, NULL::varchar)',
       [id, req.user.home_id, req.user.id, name.trim()]
     );
 
@@ -141,7 +141,7 @@ router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_softDeleteCategory($1::uuid, $2::uuid, $3::uuid)',
+      'CALL sp_softDeleteCategory($1::uuid, $2::uuid, $3::uuid, NULL::varchar, NULL::varchar)',
       [id, req.user.home_id, req.user.id]
     );
 

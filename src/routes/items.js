@@ -209,7 +209,7 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_updateItem($1::uuid, $2::uuid, $3::uuid, $4::varchar, $5::text, $6::integer, $7::uuid)',
+      'CALL sp_updateItem($1::uuid, $2::uuid, $3::uuid, $4::varchar, $5::text, $6::integer, $7::uuid, NULL::varchar, NULL::varchar)',
       [
         id,
         req.user.home_id,
@@ -222,6 +222,7 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
     );
 
     const procResult = result.rows[0];
+
     if (procResult.p_error_code) return sendProcError(res, procResult);
 
     const item = await getVisibleItem(req, id);
@@ -243,7 +244,7 @@ router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_softDeleteItem($1::uuid, $2::uuid, $3::uuid)',
+      'CALL sp_softDeleteItem($1::uuid, $2::uuid, $3::uuid, NULL::varchar, NULL::varchar)',
       [id, req.user.home_id, req.user.id]
     );
 
@@ -273,7 +274,7 @@ router.put('/:id/location', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_moveItemLocation($1::uuid, $2::uuid, $3::uuid, $4::uuid)',
+      'CALL sp_moveItemLocation($1::uuid, $2::uuid, $3::uuid, $4::uuid, NULL::varchar, NULL::varchar)',
       [id, req.user.home_id, location_id, req.user.id]
     );
 

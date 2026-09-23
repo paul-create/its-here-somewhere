@@ -13,7 +13,7 @@ async function getVisibleLocation(req, locationId) {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query(
+    const callResult = await client.query(
       'CALL sp_getLocationByID($1::uuid, $2::uuid, $3::uuid, NULL::refcursor)',
       [locationId, req.user.home_id, req.user.id]
     );
@@ -127,7 +127,7 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_updateLocation($1::uuid, $2::uuid, $3::uuid, $4::varchar, $5::boolean, $6::uuid)',
+      'CALL sp_updateLocation($1::uuid, $2::uuid, $3::uuid, $4::varchar, $5::boolean, $6::uuid, NULL::varchar, NULL::varchar)',
       [
         id,
         req.user.home_id,

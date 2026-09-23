@@ -18,7 +18,7 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
 
     // Use stored procedure to move item
     const result = await pool.query(
-      'CALL sp_moveItemLocation($1::uuid, $2::uuid, $3::uuid, $4::uuid)',
+      'CALL sp_moveItemLocation($1::uuid, $2::uuid, $3::uuid, $4::uuid, NULL::varchar, NULL::varchar)',
       [itemId, req.user.home_id, location_id, req.user.id]
     );
 

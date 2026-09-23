@@ -18,7 +18,7 @@ const authMiddleware = async (req, res, next) => {
 
     // Look up user and home via stored procedure
     const result = await pool.query(
-      'CALL sp_getUserWithHome($1::varchar)',
+      'CALL sp_getUserWithHome($1::varchar, NULL::uuid, NULL::uuid)',
       [decoded.sub]
     );
 

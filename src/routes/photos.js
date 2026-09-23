@@ -114,7 +114,7 @@ router.delete('/:photoId', authMiddleware, requireHome, async (req, res) => {
     }
 
     const result = await pool.query(
-      'CALL sp_softDeletePhoto($1::uuid, $2::uuid, $3::uuid)',
+      'CALL sp_softDeletePhoto($1::uuid, $2::uuid, $3::uuid, NULL::boolean, NULL::varchar)',
       [photoId, req.user.home_id, req.user.id]
     );
 

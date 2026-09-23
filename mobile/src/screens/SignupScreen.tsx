@@ -78,8 +78,8 @@ export function SignupScreen({ navigation }: any) {
         throw new Error('Account created, but login failed. Please try logging in manually.');
       }
 
-      // Navigate to Main
-      navigation.replace('HomeRegistration');
+      // Auto-login: redirect to LoginScreen with email/password pre-filled
+      navigation.replace('Login', { email, password, autoLogin: true });
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Signup failed';
       // Hide backend details from user
