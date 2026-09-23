@@ -3,7 +3,6 @@ const { randomUUID } = require('crypto');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { createCognitoUser, loginUser } = require('../utils/cognito');
-const { callWriteProc } = require('../utils/procedures');
 
 const router = express.Router();
 
@@ -114,18 +113,19 @@ router.post('/create-home', authMiddleware, async (req, res) => {
     const homeCode = randomUUID().substring(0, 8).toUpperCase();
 
     // Create home via stored procedure
-    const result = await callWriteProc('sp_createHome', [
-      name.trim(),
-      homeCode,
-      userId
-    ]);
+    const result = await pool.query(
+      'CALL sp_createHome($1::varchar, $2::varchar, $3::uuid)',
+      [name.trim(), homeCode, userId]
+    );
+
+    const procResult = result.rows[0];
 
     // Update user's home_id
-    await pool.query('UPDATE users SET home_id = $1 WHERE id = $2', [result.p_home_id, userId]);
+    await pool.query('UPDATE users SET home_id = $1 WHERE id = $2', [procResult.p_home_id, userId]);
 
     res.status(201).json({
-      home_id: result.p_home_id,
-      home_code: result.p_home_code_out,
+      home_id: procResult.p_home_id,
+      home_code: procResult.p_home_code_out,
       message: 'Home created successfully'
     });
   } catch (err) {
@@ -158,18 +158,20 @@ router.post('/join-home', authMiddleware, async (req, res) => {
     }
 
     // Join home via stored procedure
-    const result = await callWriteProc('sp_addUserToHome', [
-      home_code.trim(),
-      userId
-    ]);
+    const result = await pool.query(
+      'CALL sp_addUserToHome($1::varchar, $2::uuid)',
+      [home_code.trim(), userId]
+    );
 
-    if (!result.p_success) {
-      return res.status(400).json({ error: result.p_message });
+    const procResult = result.rows[0];
+
+    if (!procResult.p_success) {
+      return res.status(400).json({ error: procResult.p_message });
     }
 
     res.json({
-      home_id: result.p_home_id,
-      message: result.p_message
+      home_id: procResult.p_home_id,
+      message: procResult.p_message
     });
   } catch (err) {
     console.error(err);

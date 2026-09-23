@@ -4,7 +4,6 @@ const { randomUUID } = require('crypto');
 const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { requireHome } = require('../middleware/auth');
-const { callReadProc, callWriteProc } = require('../utils/procedures');
 const { isUuid } = require('../utils/routeHelpers');
 const { uploadPhotoToS3 } = require('../utils/s3');
 const { tagPhoto } = require('../utils/claude');
@@ -71,11 +70,18 @@ router.post('/', authMiddleware, requireHome, upload.single('file'), async (req,
 
 // GET /api/photos (retrieve all photos for user's items)
 router.get('/', authMiddleware, requireHome, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const rows = await callReadProc('sp_getAllPhotos', [req.user.home_id, req.user.id]);
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getAllPhotos($1::uuid, $2::uuid)',
+      [req.user.home_id, req.user.id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
 
     // Generate signed URLs for each photo
-    const photos = await Promise.all(rows.map(async (row) => {
+    const photos = await Promise.all(result.rows.map(async (row) => {
       const signedUrl = await getSignedPhotoUrl(row.s3_key, 3600);
       return {
         id: row.id,
@@ -89,8 +95,11 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
 
     res.json(photos);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error('Error fetching photos:', err);
     res.status(500).json({ error: 'Failed to fetch photos' });
+  } finally {
+    client.release();
   }
 });
 
@@ -103,22 +112,22 @@ router.delete('/:photoId', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Invalid photo id' });
     }
 
-    const result = await callWriteProc('sp_softDeletePhoto', [
-      photoId,
-      req.user.home_id,
-      req.user.id
-    ]);
+    const result = await pool.query(
+      'CALL sp_softDeletePhoto($1::uuid, $2::uuid, $3::uuid)',
+      [photoId, req.user.home_id, req.user.id]
+    );
 
-    if (!result.p_success) {
-      if (result.p_message === 'Photo not found') {
-        return res.status(404).json({ error: result.p_message });
+    const procResult = result.rows[0];
+    if (!procResult.p_success) {
+      if (procResult.p_message === 'Photo not found') {
+        return res.status(404).json({ error: procResult.p_message });
       }
-      return res.status(403).json({ error: result.p_message });
+      return res.status(403).json({ error: procResult.p_message });
     }
 
     // Note: We're not deleting from S3 to keep history, but in production you might want to
 
-    res.json({ message: result.p_message });
+    res.json({ message: procResult.p_message });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete photo' });

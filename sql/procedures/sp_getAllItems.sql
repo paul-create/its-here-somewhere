@@ -1,11 +1,11 @@
 CREATE OR REPLACE PROCEDURE sp_getAllItems(
   p_home_id UUID,
   p_user_id UUID,
-  OUT result REFCURSOR,
-  p_category_id UUID DEFAULT NULL,
-  p_is_private BOOLEAN DEFAULT NULL,
-  p_page_size INTEGER DEFAULT 5,
-  p_offset INTEGER DEFAULT 0
+  p_category_id UUID,
+  p_is_private BOOLEAN,
+  p_page_size INTEGER,
+  p_offset INTEGER,
+  OUT result REFCURSOR
 )
 LANGUAGE plpgsql
 AS $$

@@ -42,8 +42,8 @@ BEGIN
     RETURN;
   END IF;
 
-  INSERT INTO items (home_id, category_id, name, description, quantity, created_by, created_at, updated_at)
-  VALUES (p_home_id, p_category_id, p_name, p_description, COALESCE(p_quantity, 1), p_user_id, NOW(), NOW())
+  INSERT INTO items (id, home_id, category_id, name, description, quantity, created_by, created_at, updated_at)
+  VALUES (gen_random_uuid(), p_home_id, p_category_id, p_name, p_description, COALESCE(p_quantity, 1), p_user_id, NOW(), NOW())
   RETURNING id INTO p_item_id;
 
   INSERT INTO item_locations (home_id, item_id, location_id, moved_by, stored_at, created_at)

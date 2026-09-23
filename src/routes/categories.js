@@ -1,7 +1,7 @@
 const express = require('express');
+const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { requireHome } = require('../middleware/auth');
-const { callReadProc, callWriteProc } = require('../utils/procedures');
 const { isUuid, sendProcError } = require('../utils/routeHelpers');
 
 const router = express.Router();
@@ -10,20 +10,44 @@ const MAX_NAME_LENGTH = 100; // matches categories.name VARCHAR(100)
 
 // Single category the current user is allowed to see, or null
 async function getVisibleCategory(req, categoryId) {
-  const rows = await callReadProc('sp_getCategoryByID', [categoryId, req.user.home_id, req.user.id]);
-  return rows[0] || null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getCategoryByID($1::uuid, $2::uuid, $3::uuid)',
+      [categoryId, req.user.home_id, req.user.id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
+    return result.rows[0] || null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
 // GET /api/categories (all visible categories, A-Z - small list, used by pickers)
 // ---------------------------------------------------------------------------
 router.get('/', authMiddleware, requireHome, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const rows = await callReadProc('sp_getAllCategories', [req.user.home_id, req.user.id]);
-    res.json(rows);
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getAllCategories($1::uuid, $2::uuid)',
+      [req.user.home_id, req.user.id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
+    res.json(result.rows);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch categories' });
+  } finally {
+    client.release();
   }
 });
 
@@ -44,16 +68,20 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'is_private must be true or false' });
     }
 
-    const result = await callWriteProc('sp_createCategory', [
-      req.user.home_id,
-      name.trim(),
-      is_private === true,
-      req.user.id
-    ], 3);
+    const result = await pool.query(
+      'CALL sp_createCategory($1::uuid, $2::varchar, $3::boolean, $4::uuid)',
+      [
+        req.user.home_id,
+        name.trim(),
+        is_private === true,
+        req.user.id
+      ]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    const category = await getVisibleCategory(req, result.p_category_id);
+    const category = await getVisibleCategory(req, procResult.p_category_id);
     res.status(201).json(category);
   } catch (err) {
     console.error(err);
@@ -84,14 +112,13 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: `Category name must be ${MAX_NAME_LENGTH} characters or fewer` });
     }
 
-    const result = await callWriteProc('sp_updateCategory', [
-      id,
-      req.user.home_id,
-      req.user.id,
-      name.trim()
-    ]);
+    const result = await pool.query(
+      'CALL sp_updateCategory($1::uuid, $2::uuid, $3::uuid, $4::varchar)',
+      [id, req.user.home_id, req.user.id, name.trim()]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
     const category = await getVisibleCategory(req, id);
     res.json(category);
@@ -111,11 +138,15 @@ router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Invalid category id' });
     }
 
-    const result = await callWriteProc('sp_softDeleteCategory', [id, req.user.home_id, req.user.id]);
+    const result = await pool.query(
+      'CALL sp_softDeleteCategory($1::uuid, $2::uuid, $3::uuid)',
+      [id, req.user.home_id, req.user.id]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    res.json({ message: result.p_message });
+    res.json({ message: procResult.p_message });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete category' });

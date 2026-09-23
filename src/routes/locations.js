@@ -1,7 +1,7 @@
 const express = require('express');
+const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { requireHome } = require('../middleware/auth');
-const { callReadProc, callWriteProc } = require('../utils/procedures');
 const { isUuid, sendProcError } = require('../utils/routeHelpers');
 
 const router = express.Router();
@@ -10,20 +10,44 @@ const MAX_NAME_LENGTH = 255; // matches locations.name VARCHAR(255)
 
 // Single location the current user is allowed to see, or null
 async function getVisibleLocation(req, locationId) {
-  const rows = await callReadProc('sp_getLocationByID', [locationId, req.user.home_id, req.user.id]);
-  return rows[0] || null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getLocationByID($1::uuid, $2::uuid, $3::uuid)',
+      [locationId, req.user.home_id, req.user.id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
+    return result.rows[0] || null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
 // GET /api/locations (all visible locations, A-Z - small list, used by pickers)
 // ---------------------------------------------------------------------------
 router.get('/', authMiddleware, requireHome, async (req, res) => {
+  const client = await pool.connect();
   try {
-    const rows = await callReadProc('sp_getAllLocations', [req.user.home_id, req.user.id]);
-    res.json(rows);
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getAllLocations($1::uuid, $2::uuid)',
+      [req.user.home_id, req.user.id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
+    res.json(result.rows);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch locations' });
+  } finally {
+    client.release();
   }
 });
 
@@ -47,17 +71,21 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'is_private must be true or false' });
     }
 
-    const result = await callWriteProc('sp_createLocation', [
-      req.user.home_id,
-      name.trim(),
-      parent_location_id || null,
-      is_private === true,
-      req.user.id
-    ], 3);
+    const result = await pool.query(
+      'CALL sp_createLocation($1::uuid, $2::varchar, $3::uuid, $4::boolean, $5::uuid)',
+      [
+        req.user.home_id,
+        name.trim(),
+        parent_location_id || null,
+        is_private === true,
+        req.user.id
+      ]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    const location = await getVisibleLocation(req, result.p_location_id);
+    const location = await getVisibleLocation(req, procResult.p_location_id);
     res.status(201).json(location);
   } catch (err) {
     console.error(err);
@@ -96,16 +124,20 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Invalid parent_location_id' });
     }
 
-    const result = await callWriteProc('sp_updateLocation', [
-      id,
-      req.user.home_id,
-      req.user.id,
-      typeof name === 'string' ? name.trim() : null,
-      updateParent,
-      updateParent ? parent_location_id : null
-    ]);
+    const result = await pool.query(
+      'CALL sp_updateLocation($1::uuid, $2::uuid, $3::uuid, $4::varchar, $5::boolean, $6::uuid)',
+      [
+        id,
+        req.user.home_id,
+        req.user.id,
+        name ? name.trim() : null,
+        updateParent,
+        updateParent ? parent_location_id : null
+      ]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
     const location = await getVisibleLocation(req, id);
     res.json(location);
@@ -125,11 +157,15 @@ router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Invalid location id' });
     }
 
-    const result = await callWriteProc('sp_softDeleteLocation', [id, req.user.home_id, req.user.id]);
+    const result = await pool.query(
+      'CALL sp_softDeleteLocation($1::uuid, $2::uuid, $3::uuid)',
+      [id, req.user.home_id, req.user.id]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    res.json({ message: result.p_message });
+    res.json({ message: procResult.p_message });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete location' });

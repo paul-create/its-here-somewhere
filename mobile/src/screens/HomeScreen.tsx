@@ -47,18 +47,29 @@ export function HomeScreen({ navigation }: any) {
   const [showPrivate, setShowPrivate] = useState(false);
   const currentPageRef = useRef(0);
   const listRef = useRef<FlatList<Item>>(null);
-  const { token } = useAuth();
+  const { token, homeId } = useAuth();  // Get both token AND homeId here
 
   const fetchItemsPage = async (
     visibility: 'public' | 'private',
     page: number,
     pageSize: number
   ): Promise<ItemsPage> => {
-    const res = await fetch(
-      `${API}/items?visibility=${visibility}&page=${page + 1}&pageSize=${pageSize}`,
-      { headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` } }
-    );
-    if (!res.ok) throw new Error('Could not load your items. Pull down to try again.');
+    console.log('Fetching items with homeId:', homeId, 'token:', token ? 'present' : 'missing');
+    
+    const url = `${API}/items?visibility=${visibility}&page=${page + 1}&pageSize=${pageSize}&home_id=${homeId}`;
+    console.log('URL:', url);
+    
+    const res = await fetch(url, {
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` }
+    });
+    
+    console.log('Response status:', res.status);
+    
+    if (!res.ok) {
+      const errText = await res.text();
+      console.log('Error response:', errText);
+      throw new Error('Could not load your items. Pull down to try again.');
+    }
     return res.json();
   };
 

@@ -1,13 +1,11 @@
 const express = require('express');
+const pool = require('../db');
 const authMiddleware = require('../middleware/auth');
 const { requireHome } = require('../middleware/auth');
-const { callReadProc, callWriteProc } = require('../utils/procedures');
 const { isUuid, sendProcError } = require('../utils/routeHelpers');
 const { getSignedPhotoUrl } = require('../utils/s3');
 
 const router = express.Router();
-
-const VISIBILITY = { all: null, public: false, private: true };
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -35,8 +33,22 @@ async function withPhotoUrl({ photo_s3_key, ...item }) {
 
 // Single item the current user is allowed to see, or null
 async function getVisibleItem(req, itemId) {
-  const rows = await callReadProc('sp_getItemByID', [itemId, req.user.home_id, req.user.id]);
-  return rows.length ? withPhotoUrl(rows[0]) : null;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid)',
+      [itemId, req.user.home_id, req.user.id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
+    return result.rows.length ? withPhotoUrl(result.rows[0]) : null;
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -63,19 +75,23 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Quantity must be a whole number of 0 or more' });
     }
 
-    const result = await callWriteProc('sp_createItem', [
-      req.user.home_id,
-      category_id,
-      name.trim(),
-      typeof description === 'string' ? description.trim() || null : null,
-      quantity,
-      location_id,
-      req.user.id
-    ], 3);
+    const result = await pool.query(
+      'CALL sp_createItem($1::uuid, $2::uuid, $3::varchar, $4::text, $5::integer, $6::uuid, $7::uuid)',
+      [
+        req.user.home_id,
+        category_id,
+        name.trim(),
+        description ? description.trim() : null,
+        quantity,
+        location_id,
+        req.user.id
+      ]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    const item = await getVisibleItem(req, result.p_item_id);
+    const item = await getVisibleItem(req, procResult.p_item_id);
     res.status(201).json(item);
   } catch (err) {
     console.error(err);
@@ -87,28 +103,51 @@ router.post('/', authMiddleware, requireHome, async (req, res) => {
 // GET /api/items?page=1&pageSize=5&visibility=public&category_id=...
 // ---------------------------------------------------------------------------
 router.get('/', authMiddleware, requireHome, async (req, res) => {
+  const client = await pool.connect();
   try {
     const { category_id } = req.query;
     const visibility = req.query.visibility || 'all';
     const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
     const pageSize = Math.min(Math.max(parseInt(req.query.pageSize, 10) || 5, 1), 50);
 
-    if (!(visibility in VISIBILITY)) {
+    if (!['all', 'public', 'private'].includes(visibility)) {
       return res.status(400).json({ error: 'visibility must be all, public or private' });
     }
     if (category_id && !isUuid(category_id)) {
       return res.status(400).json({ error: 'Invalid category_id' });
     }
 
-    const rows = await callReadProc('sp_getAllItems', [
+    // Convert visibility to boolean: 'public' = false, 'private' = true, 'all' = null
+    const isPrivate = visibility === 'public' ? false : visibility === 'private' ? true : null;
+
+    const params = [
       req.user.home_id,
       req.user.id,
       category_id || null,
-      VISIBILITY[visibility],
+      isPrivate,
       pageSize,
       (page - 1) * pageSize
-    ]);
+    ];
+    
+    console.log('DEBUG sp_getAllItems params:');
+    console.log('  [0] home_id:', params[0], 'type:', typeof params[0]);
+    console.log('  [1] user_id:', params[1], 'type:', typeof params[1]);
+    console.log('  [2] category_id:', params[2], 'type:', typeof params[2]);
+    console.log('  [3] is_private:', params[3], 'type:', typeof params[3]);
+    console.log('  [4] page_size:', params[4], 'type:', typeof params[4]);
+    console.log('  [5] offset:', params[5], 'type:', typeof params[5]);
 
+    await client.query('BEGIN');
+    const callResult = await client.query(
+      'CALL sp_getAllItems($1::uuid, $2::uuid, $3::uuid, $4::boolean, $5::integer, $6::integer, NULL::refcursor)',
+      params
+    );
+    const cursorName = callResult.rows[0].result;
+    console.log('DEBUG: cursor name:', cursorName);
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
+    await client.query('COMMIT');
+
+    const rows = result.rows;
     const total = rows.length ? Number(rows[0].total_count) : 0;
     const items = await Promise.all(
       rows.map(({ total_count, ...item }) => withPhotoUrl(item))
@@ -122,8 +161,11 @@ router.get('/', authMiddleware, requireHome, async (req, res) => {
       totalPages: Math.max(Math.ceil(total / pageSize), 1)
     });
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch items' });
+  } finally {
+    client.release();
   }
 });
 
@@ -144,7 +186,7 @@ router.get('/:id', authMiddleware, requireHome, async (req, res) => {
 
     res.json(item);
   } catch (err) {
-    console.error(err);
+    console.error('Error fetching item:', err);
     res.status(500).json({ error: 'Failed to fetch item' });
   }
 });
@@ -174,17 +216,21 @@ router.put('/:id', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Quantity must be a whole number of 0 or more' });
     }
 
-    const result = await callWriteProc('sp_updateItem', [
-      id,
-      req.user.home_id,
-      req.user.id,
-      typeof name === 'string' ? name.trim() : null,
-      typeof description === 'string' ? description.trim() : null,
-      quantity,
-      category_id || null
-    ]);
+    const result = await pool.query(
+      'CALL sp_updateItem($1::uuid, $2::uuid, $3::uuid, $4::varchar, $5::text, $6::integer, $7::uuid)',
+      [
+        id,
+        req.user.home_id,
+        req.user.id,
+        name ? name.trim() : null,
+        description ? description.trim() : null,
+        quantity,
+        category_id || null
+      ]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
     const item = await getVisibleItem(req, id);
     res.json(item);
@@ -204,11 +250,15 @@ router.delete('/:id', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'Invalid item id' });
     }
 
-    const result = await callWriteProc('sp_softDeleteItem', [id, req.user.home_id, req.user.id]);
+    const result = await pool.query(
+      'CALL sp_softDeleteItem($1::uuid, $2::uuid, $3::uuid)',
+      [id, req.user.home_id, req.user.id]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
-    res.json({ message: result.p_message });
+    res.json({ message: procResult.p_message });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'Failed to delete item' });
@@ -230,14 +280,13 @@ router.put('/:id/location', authMiddleware, requireHome, async (req, res) => {
       return res.status(400).json({ error: 'A valid location_id is required' });
     }
 
-    const result = await callWriteProc('sp_moveItemLocation', [
-      id,
-      req.user.home_id,
-      location_id,
-      req.user.id
-    ]);
+    const result = await pool.query(
+      'CALL sp_moveItemLocation($1::uuid, $2::uuid, $3::uuid, $4::uuid)',
+      [id, req.user.home_id, location_id, req.user.id]
+    );
 
-    if (result.p_error_code) return sendProcError(res, result);
+    const procResult = result.rows[0];
+    if (procResult.p_error_code) return sendProcError(res, procResult);
 
     const item = await getVisibleItem(req, id);
     res.json(item);
@@ -251,6 +300,7 @@ router.put('/:id/location', authMiddleware, requireHome, async (req, res) => {
 // GET /api/items/:id/activity (activity history)
 // ---------------------------------------------------------------------------
 router.get('/:id/activity', authMiddleware, requireHome, async (req, res) => {
+  const client = await pool.connect();
   try {
     const { id } = req.params;
     if (!isUuid(id)) {
@@ -258,16 +308,34 @@ router.get('/:id/activity', authMiddleware, requireHome, async (req, res) => {
     }
 
     // Visibility check first, so private items' history stays private
-    const found = await callReadProc('sp_getItemByID', [id, req.user.home_id, req.user.id]);
-    if (found.length === 0) {
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getItemByID($1::uuid, $2::uuid, $3::uuid)',
+      [id, req.user.home_id, req.user.id]
+    );
+    let found = await client.query('FETCH ALL FROM result');
+    if (found.rows.length === 0) {
+      await client.query('COMMIT');
+      client.release();
       return res.status(404).json({ error: 'Item not found' });
     }
+    await client.query('COMMIT');
 
-    const rows = await callReadProc('sp_getActivityLog', [id, req.user.home_id]);
-    res.json(rows);
+    await client.query('BEGIN');
+    await client.query(
+      'CALL sp_getActivityLog($1::uuid, $2::uuid)',
+      [id, req.user.home_id]
+    );
+    const result = await client.query('FETCH ALL FROM result');
+    await client.query('COMMIT');
+
+    res.json(result.rows);
   } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
     console.error(err);
     res.status(500).json({ error: 'Failed to fetch activity' });
+  } finally {
+    client.release();
   }
 });
 
