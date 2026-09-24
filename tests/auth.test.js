@@ -15,7 +15,7 @@ async function runAuthTests() {
       email: testEmail,
       password: 'TestPass123!'
     });
-    console.log('DEBUG signupRes.body:', signupRes.body);
+    
     assert.strictEqual(signupRes.status, 201, 'Signup failed');
     userId = signupRes.body.userId;
     console.log('DEBUG userId after assignment:', userId);
@@ -61,7 +61,6 @@ async function runAuthTests() {
     console.log('✓ Login after home registration successful\n');
 
     console.log('Auth tests passed!');
-    console.log('DEBUG auth.test.js return values:', { token: !!token, homeId, userId });
     return { token, homeId, userId };
   } catch (err) {
     console.error('Test failed:', err.message);

@@ -38,7 +38,6 @@ async function runAllTests() {
       if (test.name === 'Auth') {
         // Auth returns { token, homeId }
         authResult = await test.fn();
-        console.log('DEBUG in run-all.js: authResult after Auth =', authResult);
       } else {
         // All other tests use the token/homeId from auth
         await test.fn(authResult);
