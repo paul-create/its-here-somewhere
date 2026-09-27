@@ -1,4 +1,4 @@
-name: Deploy Database
+name: Deploy
 
 on:
   workflow_dispatch:
@@ -6,38 +6,18 @@ on:
     branches: [main]
     paths:
       - 'sql/**'
+      - 'src/**'
+      - 'db/**'
+      - 'Dockerfile'
+      - 'package*.json'
       - '.github/workflows/deploy.yml'
 
-# Never run two database deploys at the same time
+# Never run two deploys at the same time
 concurrency:
-  group: database-deploy
+  group: deployment
   cancel-in-progress: false
 
 jobs:
-  # ============================================================================
-  # Test Job - Disabled until App Runner deployment is ready
-  # Uncomment this section once backend is accessible via App Runner
-  # ============================================================================
-  # test:
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Set up Node.js
-  #       uses: actions/setup-node@v4
-  #       with:
-  #         node-version: '20'
-  #
-  #     - name: Install dependencies
-  #       run: npm install
-  #
-  #     - name: Run test suite
-  #       env:
-  #         BACKEND_URL: ${{ secrets.BACKEND_URL_TEST }}
-  #       run: npm test
-
   deploy-database:
     runs-on: ubuntu-latest
     permissions:
@@ -62,25 +42,46 @@ jobs:
           git diff --cached --quiet || git commit -m "Archive migrations after deployment [skip ci]"
           git push
 
-  # ============================================================================
-  # App Runner Deployment - Pending AWS Approval
-  # Uncomment this section once AWS App Runner approval is received
-  # ============================================================================
-  # deploy-app-runner:
-  #   needs: deploy-database
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Configure AWS credentials
-  #       uses: aws-actions/configure-aws-credentials@v4
-  #       with:
-  #         aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  #         aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  #         aws-region: eu-west-2
-  #
-  #     - name: Deploy to App Runner
-  #       run: |
-  #         aws apprunner start-deployment --service-arn arn:aws:apprunner:eu-west-2:ACCOUNT_ID:service/its-here-somewhere/XXXX
+  build-and-push-docker:
+    needs: deploy-database
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: eu-west-2
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build Docker image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: its-here-somewhere
+          IMAGE_TAG: latest
+        run: |
+          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG .
+          docker tag $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+
+      - name: Push to ECR
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: its-here-somewhere
+          IMAGE_TAG: latest
+        run: |
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+          docker push $ECR_REGISTRY/$ECR_REPOSITORY:${{ github.sha }}
+
+      - name: Print image URI
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: its-here-somewhere
+          IMAGE_TAG: latest
+        run: echo "Image pushed to $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"

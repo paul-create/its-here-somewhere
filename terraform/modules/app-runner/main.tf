@@ -130,9 +130,11 @@ resource "aws_apprunner_service" "app" {
     }
 
     image_repository {
+      image_identifier      = "${aws_ecr_repository.app.repository_url}:latest"
+      image_repository_type = "ECR"
+
       image_configuration {
         port = "3000"
-
         runtime_environment_variables = {
           NODE_ENV           = "production"
           DATABASE_URL       = "postgresql://${var.rds_username}:${var.rds_password}@${var.rds_endpoint}/${var.rds_database}"
@@ -142,16 +144,6 @@ resource "aws_apprunner_service" "app" {
           AWS_REGION         = var.aws_region
         }
       }
-      image_identifier      = "${aws_ecr_repository.app.repository_url}:latest"
-      repository_type       = "ECR"
-    }
-  }
-
-  network_configuration {
-    vpc_subnets            = data.aws_subnets.default.ids
-    security_groups        = [aws_security_group.app_runner.id]
-    ingress_vpc_configuration {
-      ingress_vpc_id = data.aws_vpc.default.id
     }
   }
 
@@ -161,30 +153,8 @@ resource "aws_apprunner_service" "app" {
     instance_role_arn = aws_iam_role.app_runner.arn
   }
 
-  auto_scaling_configuration_arn = aws_apprunner_auto_scaling_configuration_resource.app.arn
-
-  depends_on = [
-    aws_iam_role_policy.app_runner_ecr,
-    aws_iam_role_policy.app_runner_s3
-  ]
-
   tags = {
     Name = "its-here-somewhere"
-  }
-}
-
-# Auto-scaling Configuration
-resource "aws_apprunner_auto_scaling_configuration_resource" "app" {
-  auto_scaling_configuration_name = "its-here-somewhere-scaling"
-
-  max_concurrency              = 100
-  min_size                     = var.min_instances
-  max_size                     = var.max_instances
-  target_cpu_utilization_percentage    = 70
-  target_memory_utilization_percentage = 80
-
-  tags = {
-    Name = "its-here-somewhere-scaling"
   }
 }
 
