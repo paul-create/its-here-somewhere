@@ -86,33 +86,42 @@ jobs:
           IMAGE_TAG: latest
         run: echo "Image pushed to $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
 
-      - name: Deploy to Beanstalk
+      - name: Deploy to Beanstalk with docker-compose
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
           ECR_REPOSITORY: its-here-somewhere
           IMAGE_TAG: latest
         run: |
-          # Create docker-compose.yml instead of Dockerrun.aws.json
-          cat > docker-compose.yml <<EOF
+          # Create docker-compose.yml with ECR image reference
+          cat > docker-compose.yml <<'EOF'
           version: '3.8'
           services:
             app:
-              image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+              image: ${{ steps.login-ecr.outputs.registry }}/its-here-somewhere:latest
               ports:
                 - "3000:3000"
               environment:
                 NODE_ENV: production
+                DATABASE_URL: ${{ secrets.PROD_DB }}
+                S3_BUCKET: ${{ secrets.S3_BUCKET }}
+                COGNITO_USER_POOL: ${{ secrets.COGNITO_USER_POOL }}
+                COGNITO_CLIENT_ID: ${{ secrets.COGNITO_CLIENT_ID }}
+                AWS_REGION: eu-west-2
           EOF
-          
-          # Upload to S3 and deploy
-          aws s3 cp docker-compose.yml s3://elasticbeanstalk-eu-west-2-978841975502/docker-compose.yml
-          
-          # Update Beanstalk environment
+
+          # Upload docker-compose.yml to S3
+          aws s3 cp docker-compose.yml s3://elasticbeanstalk-eu-west-2-978841975502/docker-compose-${{ github.sha }}.yml
+
+          # Create new application version in Beanstalk
           aws elasticbeanstalk create-application-version \
             --application-name its-here-somewhere \
             --version-label ${{ github.sha }} \
-            --source-bundle S3Bucket=elasticbeanstalk-eu-west-2-978841975502,S3Key=docker-compose.yml
-          
+            --source-bundle S3Bucket=elasticbeanstalk-eu-west-2-978841975502,S3Key=docker-compose-${{ github.sha }}.yml \
+            --region eu-west-2
+
+          # Update environment to use new version
           aws elasticbeanstalk update-environment \
+            --application-name its-here-somewhere \
             --environment-name its-here-somewhere-prod \
-            --version-label ${{ github.sha }}
+            --version-label ${{ github.sha }} \
+            --region eu-west-2
