@@ -92,30 +92,26 @@ jobs:
           ECR_REPOSITORY: its-here-somewhere
           IMAGE_TAG: latest
         run: |
-          # Create Dockerrun.aws.json with the latest image
-          cat > Dockerrun.aws.json <<EOF
-          {
-            "AWSEBDockerrunVersion": "1",
-            "Image": {
-              "Name": "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG",
-              "Update": true
-            },
-            "Ports": [
-              {
-                "ContainerPort": 3000
-              }
-            ]
-          }
+          # Create docker-compose.yml instead of Dockerrun.aws.json
+          cat > docker-compose.yml <<EOF
+          version: '3.8'
+          services:
+            app:
+              image: $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG
+              ports:
+                - "3000:3000"
+              environment:
+                NODE_ENV: production
           EOF
           
           # Upload to S3 and deploy
-          aws s3 cp Dockerrun.aws.json s3://elasticbeanstalk-eu-west-2-978841975502/Dockerrun.aws.json
+          aws s3 cp docker-compose.yml s3://elasticbeanstalk-eu-west-2-978841975502/docker-compose.yml
           
           # Update Beanstalk environment
           aws elasticbeanstalk create-application-version \
             --application-name its-here-somewhere \
             --version-label ${{ github.sha }} \
-            --source-bundle S3Bucket=elasticbeanstalk-eu-west-2-978841975502,S3Key=Dockerrun.aws.json
+            --source-bundle S3Bucket=elasticbeanstalk-eu-west-2-978841975502,S3Key=docker-compose.yml
           
           aws elasticbeanstalk update-environment \
             --environment-name its-here-somewhere-prod \
