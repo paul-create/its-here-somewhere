@@ -69,9 +69,16 @@ resource "aws_iam_role_policy" "app_runner_ecr" {
         Action = [
           "ecr:GetDownloadUrlForLayer",
           "ecr:BatchGetImage",
+          "ecr:PutImage"
+        ]
+        Resource = "${aws_ecr_repository.app.arn}*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
           "ecr:GetAuthorizationToken"
         ]
-        Resource = aws_ecr_repository.app.arn
+        Resource = "*"
       }
     ]
   })
