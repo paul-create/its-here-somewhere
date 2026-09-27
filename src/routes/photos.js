@@ -135,4 +135,115 @@ router.delete('/:photoId', authMiddleware, requireHome, async (req, res) => {
   }
 });
 
+// GET /api/photos/:photoId/tags (get all tags for a photo)
+router.get('/:photoId/tags', authMiddleware, requireHome, async (req, res) => {
+  const client = await pool.connect();
+  try {
+    const { photoId } = req.params;
+
+    if (!isUuid(photoId)) {
+      return res.status(400).json({ error: 'Invalid photo id' });
+    }
+
+    await client.query('BEGIN');
+    const callResult = await client.query(
+      'CALL sp_getPhotoWithTags($1::uuid, $2::uuid, NULL::refcursor)',
+      [photoId, req.user.home_id]
+    );
+    const cursorName = callResult.rows[0].result;
+    const result = await client.query(`FETCH ALL FROM "${cursorName}"`);
+    await client.query('COMMIT');
+
+    if (result.rows.length === 0) {
+      return res.status(404).json({ error: 'Photo not found' });
+    }
+
+    const photo = result.rows[0];
+    res.json({
+      id: photo.id,
+      item_id: photo.item_id,
+      s3_key: photo.s3_key,
+      tags: photo.tags || []
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Error fetching photo tags:', err);
+    res.status(500).json({ error: 'Failed to fetch tags' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /api/photos/:photoId/tags (add a tag to a photo)
+router.post('/:photoId/tags', authMiddleware, requireHome, async (req, res) => {
+  try {
+    const { photoId } = req.params;
+    const { tag_name } = req.body;
+
+    if (!isUuid(photoId)) {
+      return res.status(400).json({ error: 'Invalid photo id' });
+    }
+
+    if (!tag_name || !tag_name.trim()) {
+      return res.status(400).json({ error: 'Tag name is required' });
+    }
+
+    const result = await pool.query(
+      'CALL sp_addTag($1::uuid, $2::uuid, $3::varchar, NULL::boolean, NULL::varchar, NULL::uuid)',
+      [photoId, req.user.home_id, tag_name.trim()]
+    );
+
+    const procResult = result.rows[0];
+
+    if (!procResult.p_success) {
+      if (procResult.p_message === 'Photo not found') {
+        return res.status(404).json({ error: procResult.p_message });
+      }
+      return res.status(400).json({ error: procResult.p_message });
+    }
+
+    res.status(201).json({
+      tagId: procResult.p_tag_id,
+      tag_name: tag_name.toLowerCase().trim(),
+      message: procResult.p_message
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to add tag' });
+  }
+});
+
+// DELETE /api/photos/:photoId/tags/:tagId (remove a tag from a photo)
+router.delete('/:photoId/tags/:tagId', authMiddleware, requireHome, async (req, res) => {
+  try {
+    const { photoId, tagId } = req.params;
+
+    if (!isUuid(photoId) || !isUuid(tagId)) {
+      return res.status(400).json({ error: 'Invalid photo id or tag id' });
+    }
+
+    const result = await pool.query(
+      'CALL sp_deleteTag($1::uuid, $2::uuid, $3::uuid, NULL::boolean, NULL::varchar)',
+      [tagId, photoId, req.user.home_id]
+    );
+
+    const procResult = result.rows[0];
+
+    if (!procResult.p_success) {
+      if (procResult.p_message === 'Photo not found') {
+        return res.status(404).json({ error: procResult.p_message });
+      }
+      if (procResult.p_message === 'Tag not found') {
+        return res.status(404).json({ error: procResult.p_message });
+      }
+      return res.status(400).json({ error: procResult.p_message });
+    }
+
+    res.json({ message: procResult.p_message });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Failed to delete tag' });
+  }
+});
+
 module.exports = router;

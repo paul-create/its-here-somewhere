@@ -9,6 +9,11 @@ import * as ImagePicker from 'expo-image-picker';
 import axios from 'axios';
 import { PhotoPickerComponent } from '../components/PhotoPickerComponent';
 import { PhotoPreviewComponent } from '../components/PhotoPreviewComponent';
+import { TagSelectorComponent } from '../components/TagSelectorComponent';
+
+// ============================================================================
+// INTERFACES
+// ============================================================================
 
 interface Item {
   id: string;
@@ -38,6 +43,12 @@ interface Photo {
   uri?: string; // For temporary local photos
 }
 
+interface Tag {
+  id: string;
+  tag_name: string;
+  is_auto_generated: boolean;
+}
+
 interface Activity {
   id: string;
   property: string;
@@ -49,14 +60,23 @@ interface Activity {
 
 type TempPhoto = { uri: string; type: string; name: string };
 
+// ============================================================================
+// COMPONENT
+// ============================================================================
+
 export function ItemDetailsScreen({ navigation, route }: any) {
   const { itemId } = route.params;
+
+  // ========== STATE ==========
   const [item, setItem] = useState<Item | null>(null);
   const [categories, setCategories] = useState<Category[]>([]);
   const [locations, setLocations] = useState<Location[]>([]);
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
+  const [tags, setTags] = useState<Tag[]>([]);
+  const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingTags, setIsLoadingTags] = useState(false);
   const [showMoveModal, setShowMoveModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState('');
@@ -65,6 +85,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
   const [newPhoto, setNewPhoto] = useState<TempPhoto | null>(null);
   const { token } = useAuth();
 
+  // ========== FETCH DATA ==========
   const fetchData = async () => {
     if (!token) return;
 
@@ -109,6 +130,21 @@ export function ItemDetailsScreen({ navigation, route }: any) {
         const photosArray = Array.isArray(photosData) ? photosData : (photosData.photos || []);
         const itemPhoto = photosArray.find((p: Photo) => p.item_id === itemId);
         setPhoto(itemPhoto || null);
+
+        // Fetch tags for this photo
+        if (itemPhoto?.id) {
+          try {
+            const tagsRes = await fetch(`http://192.168.1.146:3000/api/photos/${itemPhoto.id}/tags`, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            if (tagsRes.ok) {
+              const tagsData = await tagsRes.json();
+              setTags(tagsData.tags || []);
+            }
+          } catch (err) {
+            console.error('Error fetching tags:', err);
+          }
+        }
       }
 
       if (activityRes.ok) {
@@ -135,6 +171,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
     }
   }, [item]);
 
+  // ========== HANDLERS ==========
   const getCategoryName = (categoryId: string): string => {
     return categories.find(c => c.id === categoryId)?.name || 'Uncategorised';
   };
@@ -279,6 +316,68 @@ export function ItemDetailsScreen({ navigation, route }: any) {
     );
   };
 
+  // ========== TAG HANDLERS ==========
+  const handleTagSelect = (tagId: string) => {
+    const newSelected = new Set(selectedTagIds);
+    if (newSelected.has(tagId)) {
+      newSelected.delete(tagId);
+    } else {
+      newSelected.add(tagId);
+    }
+    setSelectedTagIds(newSelected);
+  };
+
+  const handleAddTag = async (tagName: string) => {
+    if (!token || !photo) return;
+
+    try {
+      const res = await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}/tags`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ tag_name: tagName })
+      });
+
+      if (res.ok) {
+        const newTag = await res.json();
+        setTags([...tags, {
+          id: newTag.tagId,
+          tag_name: newTag.tag_name,
+          is_auto_generated: false
+        }]);
+      } else {
+        throw new Error('Failed to add tag');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to add tag');
+      throw err;
+    }
+  };
+
+  const handleRemoveTag = async (tagId: string) => {
+    if (!token || !photo) return;
+
+    try {
+      const res = await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}/tags/${tagId}`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (res.ok) {
+        setTags(tags.filter(t => t.id !== tagId));
+        setSelectedTagIds(new Set([...selectedTagIds].filter(id => id !== tagId)));
+      } else {
+        throw new Error('Failed to remove tag');
+      }
+    } catch (err) {
+      Alert.alert('Error', 'Failed to remove tag');
+      throw err;
+    }
+  };
+
+  // ========== ACTIVITY HELPERS ==========
   const formatActivityDate = (dateString: string): string => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' });
@@ -294,6 +393,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
     return grouped;
   };
 
+  // ========== RENDER ==========
   if (isLoading) {
     return (
       <View style={[styles.container, styles.centered]}>
@@ -321,7 +421,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
           <TouchableOpacity onPress={() => navigation.goBack()}>
             <MaterialCommunityIcons name="chevron-left" size={28} color="#008080" />
           </TouchableOpacity>
-           <View style={styles.headerActions}>
+          <View style={styles.headerActions}>
             <TouchableOpacity onPress={() => {
               if (!isEditing && item) {
                 setEditName(item.name);
@@ -427,59 +527,77 @@ export function ItemDetailsScreen({ navigation, route }: any) {
           )}
         </View>
 
+        {/* Tags Section */}
+        {photo && (
+          <View style={styles.detailsSection}>
+            <TagSelectorComponent
+              tags={tags}
+              selectedTagIds={selectedTagIds}
+              onTagSelect={handleTagSelect}
+              onAddTag={handleAddTag}
+              onRemoveTag={handleRemoveTag}
+              isLoading={isLoadingTags}
+            />
+          </View>
+        )}
+
         {/* Activity History */}
         {activity.length > 0 && (
-            <View style={styles.activitySection}>
+          <View style={styles.activitySection}>
             <Text style={styles.activityTitle}>History</Text>
             {Object.entries(groupedActivity).map(([date, acts]) => (
-                <View key={date} style={styles.dateGroup}>
+              <View key={date} style={styles.dateGroup}>
                 <Text style={styles.dateHeader}>{date}</Text>
                 {acts.map((act, idx) => (
-                    <View key={act.id} style={styles.activityEntry}>
+                  <View key={act.id} style={styles.activityEntry}>
                     <Text style={styles.propertyName}>{act.property}</Text>
                     <View style={styles.changeRow}>
-                        <Text style={styles.oldValue}>{act.old_value || 'New'}</Text>
-                        <MaterialCommunityIcons name="arrow-right" size={16} color="#999999" />
-                        <Text style={styles.newValue}>{act.new_value}</Text>
+                      <Text style={styles.oldValue}>{act.old_value || 'New'}</Text>
+                      <MaterialCommunityIcons name="arrow-right" size={16} color="#999999" />
+                      <Text style={styles.newValue}>{act.new_value}</Text>
                     </View>
-                    </View>
+                  </View>
                 ))}
-                </View>
+              </View>
             ))}
-            </View>
+          </View>
         )}
 
         {/* Move Modal */}
         <Modal visible={showMoveModal} transparent animationType="slide">
-            <View style={styles.modalOverlay}>
+          <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
+              <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>Select New Location</Text>
                 <TouchableOpacity onPress={() => setShowMoveModal(false)}>
-                    <MaterialCommunityIcons name="close" size={24} color="#333333" />
+                  <MaterialCommunityIcons name="close" size={24} color="#333333" />
                 </TouchableOpacity>
-                </View>
-                <ScrollView style={styles.locationList}>
+              </View>
+              <ScrollView style={styles.locationList}>
                 {locations.map((loc) => (
-                    <TouchableOpacity
+                  <TouchableOpacity
                     key={loc.id}
                     style={styles.locationOption}
                     onPress={() => handleMoveItem(loc.id)}
-                    >
+                  >
                     <Text style={styles.locationOptionText}>{loc.name}</Text>
                     {loc.is_private && <Text style={styles.privateLabel}>(Private)</Text>}
-                    </TouchableOpacity>
+                  </TouchableOpacity>
                 ))}
-                </ScrollView>
+              </ScrollView>
             </View>
-            </View>
+          </View>
         </Modal>
 
         <View style={{ height: 20 }} />
-        </ScrollView>
+      </ScrollView>
     </SafeAreaView>
-    );
+  );
 }
+
+// ============================================================================
+// STYLES
+// ============================================================================
 
 const styles = StyleSheet.create({
   container: {
@@ -694,25 +812,6 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 14,
     fontWeight: '600',
-  },
-  photoEditButtons: {
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    backgroundColor: '#f9f9f9',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
-  },
-  photoEditButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 8,
-    paddingVertical: 10,
-  },
-  photoEditButtonText: {
-    color: '#008080',
-    fontSize: 14,
-    fontWeight: '500',
   },
   photoPickerContainer: {
     paddingHorizontal: 40,
