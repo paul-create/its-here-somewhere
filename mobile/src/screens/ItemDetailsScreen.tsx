@@ -74,6 +74,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
   const [photo, setPhoto] = useState<Photo | null>(null);
   const [activity, setActivity] = useState<Activity[]>([]);
   const [tags, setTags] = useState<Tag[]>([]);
+  const [originalTagIds, setOriginalTagIds] = useState<Set<string>>(new Set()); 
   const [selectedTagIds, setSelectedTagIds] = useState<Set<string>>(new Set());
   const [isLoading, setIsLoading] = useState(true);
   const [isLoadingTags, setIsLoadingTags] = useState(false);
@@ -139,7 +140,10 @@ export function ItemDetailsScreen({ navigation, route }: any) {
             });
             if (tagsRes.ok) {
               const tagsData = await tagsRes.json();
-              setTags(tagsData.tags || []);
+              const tagsArray = tagsData.tags || [];
+              setTags(tagsArray);
+              setOriginalTagIds(new Set(tagsArray.map((t: Tag) => t.id))); // NEW: track original
+              setSelectedTagIds(new Set(tagsArray.map((t: Tag) => t.id))); // NEW: pre-select all
             }
           } catch (err) {
             console.error('Error fetching tags:', err);
@@ -276,6 +280,20 @@ export function ItemDetailsScreen({ navigation, route }: any) {
         );
 
         setNewPhoto(null);
+      }
+
+      if (photo?.id) {
+        const tagsToDelete = [...originalTagIds].filter(id => !selectedTagIds.has(id));
+        for (const tagId of tagsToDelete) {
+          try {
+            await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}/tags/${tagId}`, {
+              method: 'DELETE',
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+          } catch (err) {
+            console.error('Error deleting tag:', err);
+          }
+        }
       }
 
       setIsEditing(false);
@@ -537,6 +555,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
               onAddTag={handleAddTag}
               onRemoveTag={handleRemoveTag}
               isLoading={isLoadingTags}
+              mode={isEditing ? 'edit' : 'view'}  // NEW: pass mode
             />
           </View>
         )}

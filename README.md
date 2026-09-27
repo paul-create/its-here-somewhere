@@ -192,7 +192,7 @@ MIT License - See LICENSE file for details.
 
 ## Questions?
 
-Reach out to [paul@example.com] or open an issue on GitHub.
+Reach out to [paulioventures@gmail.com] or open an issue on GitHub.
 
 ---
 
