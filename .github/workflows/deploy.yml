@@ -85,3 +85,38 @@ jobs:
           ECR_REPOSITORY: its-here-somewhere
           IMAGE_TAG: latest
         run: echo "Image pushed to $ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG"
+
+      - name: Deploy to Beanstalk
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          ECR_REPOSITORY: its-here-somewhere
+          IMAGE_TAG: latest
+        run: |
+          # Create Dockerrun.aws.json with the latest image
+          cat > Dockerrun.aws.json <<EOF
+          {
+            "AWSEBDockerrunVersion": "1",
+            "Image": {
+              "Name": "$ECR_REGISTRY/$ECR_REPOSITORY:$IMAGE_TAG",
+              "Update": true
+            },
+            "Ports": [
+              {
+                "ContainerPort": 3000
+              }
+            ]
+          }
+          EOF
+          
+          # Upload to S3 and deploy
+          aws s3 cp Dockerrun.aws.json s3://elasticbeanstalk-eu-west-2-978841975502/Dockerrun.aws.json
+          
+          # Update Beanstalk environment
+          aws elasticbeanstalk create-application-version \
+            --application-name its-here-somewhere \
+            --version-label ${{ github.sha }} \
+            --source-bundle S3Bucket=elasticbeanstalk-eu-west-2-978841975502,S3Key=Dockerrun.aws.json
+          
+          aws elasticbeanstalk update-environment \
+            --environment-name its-here-somewhere-prod \
+            --version-label ${{ github.sha }}
