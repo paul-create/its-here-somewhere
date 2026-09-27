@@ -39,3 +39,28 @@ module "s3" {
 module "cognito" {
   source = "./modules/cognito"
 }
+
+module "beanstalk" {
+  source = "./modules/beanstalk"
+
+  app_name              = "its-here-somewhere"
+  environment_name      = "its-here-somewhere-prod"
+  container_port        = 3000
+  instance_type         = "t3.small"
+  
+  rds_endpoint          = module.rds.db_endpoint
+  rds_username          = var.db_username
+  rds_password          = var.db_password
+  rds_database          = var.db_name
+  s3_bucket_name        = module.s3.bucket_name
+  cognito_user_pool_id  = module.cognito.user_pool_id
+  cognito_client_id     = module.cognito.client_id
+  aws_region            = var.aws_region
+  ecr_repository_url    = module.app_runner.ecr_repository_url
+
+  depends_on = [
+    module.rds,
+    module.s3,
+    module.cognito
+  ]
+}

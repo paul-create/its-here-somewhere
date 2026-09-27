@@ -1,5 +1,23 @@
+variable "app_name" {
+  description = "Elastic Beanstalk application name"
+  type        = string
+  default     = "its-here-somewhere"
+}
+
+variable "environment_name" {
+  description = "Elastic Beanstalk environment name"
+  type        = string
+  default     = "its-here-somewhere-prod"
+}
+
+variable "container_port" {
+  description = "Container port"
+  type        = number
+  default     = 3000
+}
+
 variable "rds_endpoint" {
-  description = "RDS database endpoint (host:port)"
+  description = "RDS database endpoint"
   type        = string
 }
 
@@ -20,7 +38,7 @@ variable "rds_database" {
 }
 
 variable "s3_bucket_name" {
-  description = "S3 bucket name for photos"
+  description = "S3 bucket name"
   type        = string
 }
 
@@ -40,26 +58,20 @@ variable "aws_region" {
   default     = "eu-west-2"
 }
 
-variable "instance_cpu" {
-  description = "CPU units for App Runner (256, 512, 1024, 2048, 4096)"
-  type        = number
-  default     = 256
-}
-
-variable "instance_memory" {
-  description = "Memory in MB for App Runner (512, 1024, 2048, 3072, 4096)"
-  type        = number
-  default     = 512
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+  default     = "t3.small"
 }
 
 variable "min_instances" {
-  description = "Minimum number of App Runner instances"
+  description = "Minimum number of instances"
   type        = number
   default     = 1
 }
 
 variable "max_instances" {
-  description = "Maximum number of App Runner instances"
+  description = "Maximum number of instances"
   type        = number
   default     = 4
 }

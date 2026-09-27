@@ -17,18 +17,3 @@ output "cognito_client_id" {
   description = "Cognito App Client ID"
   value       = module.cognito.client_id
 }
-
-output "ecr_repository_url" {
-  description = "ECR repository URL"
-  value       = module.app_runner.ecr_repository_url
-}
-
-output "ecr_repository_name" {
-  description = "ECR repository name"
-  value       = module.app_runner.ecr_repository_name
-}
-
-output "app_runner_service_url" {
-  description = "App Runner service URL"
-  value       = module.app_runner.app_runner_service_url
-}
