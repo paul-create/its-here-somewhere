@@ -28,13 +28,14 @@ BEGIN
 
   p_success := TRUE;
   p_message := 'Tag added successfully';
-EXCEPTION WHEN UNIQUE_VIOLATION THEN
-  p_success := FALSE;
-  p_message := 'Tag already exists for this photo';
-  p_tag_id := NULL;
-EXCEPTION WHEN OTHERS THEN
-  p_success := FALSE;
-  p_message := SQLERRM;
-  p_tag_id := NULL;
+EXCEPTION 
+  WHEN UNIQUE_VIOLATION THEN
+    p_success := FALSE;
+    p_message := 'Tag already exists for this photo';
+    p_tag_id := NULL;
+  WHEN OTHERS THEN
+    p_success := FALSE;
+    p_message := SQLERRM;
+    p_tag_id := NULL;
 END;
 $$;

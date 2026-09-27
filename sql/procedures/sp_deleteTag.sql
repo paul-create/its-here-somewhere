@@ -32,8 +32,9 @@ BEGIN
 
   p_success := TRUE;
   p_message := 'Tag deleted successfully';
-EXCEPTION WHEN OTHERS THEN
-  p_success := FALSE;
-  p_message := SQLERRM;
+EXCEPTION 
+  WHEN OTHERS THEN
+    p_success := FALSE;
+    p_message := SQLERRM;
 END;
 $$;
