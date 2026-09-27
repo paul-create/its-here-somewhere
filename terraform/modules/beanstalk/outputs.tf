@@ -10,5 +10,5 @@ output "beanstalk_environment_name" {
 
 output "beanstalk_application_name" {
   description = "Beanstalk application name"
-  value       = aws_elastic_beanstalk_app.app.name
+  value       = aws_elastic_beanstalk_application.app.name
 }

@@ -1,5 +1,5 @@
 # Elastic Beanstalk Application
-resource "aws_elastic_beanstalk_app" "app" {
+resource "aws_elastic_beanstalk_application" "app" {
   name = var.app_name
 
   tags = {
@@ -92,10 +92,9 @@ resource "aws_iam_instance_profile" "beanstalk_profile" {
 # Beanstalk Environment
 resource "aws_elastic_beanstalk_environment" "env" {
   name                = var.environment_name
-  application         = aws_elastic_beanstalk_app.app.name
-  solution_stack_name = "64bit Amazon Linux 2 v6.11.0 running Docker"
+  application         = aws_elastic_beanstalk_application.app.name
+  solution_stack_name = "64bit Amazon Linux 2023 v4.13.9 running Docker"
   tier                = "WebServer"
-  instance_type       = var.instance_type
 
   setting {
     namespace = "aws:autoscaling:asg"
@@ -110,7 +109,7 @@ resource "aws_elastic_beanstalk_environment" "env" {
   }
 
   setting {
-    namespace = "aws:ec2:instances"
+    namespace = "aws:autoscaling:launchconfiguration"
     name      = "InstanceType"
     value     = var.instance_type
   }
@@ -200,7 +199,7 @@ resource "aws_elastic_beanstalk_environment" "env" {
   }
 
   setting {
-    namespace = "aws:ec2:instances"
+    namespace = "aws:autoscaling:launchconfiguration"
     name      = "IamInstanceProfile"
     value     = aws_iam_instance_profile.beanstalk_profile.name
   }

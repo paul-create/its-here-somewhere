@@ -56,7 +56,6 @@ module "beanstalk" {
   cognito_user_pool_id  = module.cognito.user_pool_id
   cognito_client_id     = module.cognito.client_id
   aws_region            = var.aws_region
-  ecr_repository_url    = module.app_runner.ecr_repository_url
 
   depends_on = [
     module.rds,

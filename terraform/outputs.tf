@@ -17,3 +17,13 @@ output "cognito_client_id" {
   description = "Cognito App Client ID"
   value       = module.cognito.client_id
 }
+
+output "beanstalk_endpoint" {
+  description = "Beanstalk environment endpoint"
+  value       = module.beanstalk.beanstalk_endpoint
+}
+
+output "beanstalk_environment_name" {
+  description = "Beanstalk environment name"
+  value       = module.beanstalk.beanstalk_environment_name
+}
