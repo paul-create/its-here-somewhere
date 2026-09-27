@@ -4,8 +4,9 @@ import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useAuth } from '../context/AuthContext';
 import { AppHeaderComponent } from '../components/AppHeaderComponent';
+import { getApiUrl } from '../config/api';
 
-const API = 'http://192.168.1.146:3000/api';
+const API = `${getApiUrl()}/api`;
 const ITEMS_PER_PAGE = 5;
 const PRIVATE_LIMIT = 50;
 

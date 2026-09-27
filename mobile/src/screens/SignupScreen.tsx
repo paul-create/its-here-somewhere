@@ -2,6 +2,9 @@ import React, { useState } from 'react';
 import { View, StyleSheet, ScrollView, TouchableOpacity, Text } from 'react-native';
 import { TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
+import { getApiUrl } from '../config/api';
+
+const API = `${getApiUrl()}/api`;
 
 export function SignupScreen({ navigation }: any) {
   const [email, setEmail] = useState('');
@@ -44,7 +47,7 @@ export function SignupScreen({ navigation }: any) {
     setIsLoading(true);
     try {
       // Call signup endpoint
-      const response = await fetch('http://192.168.1.146:3000/api/auth/signup', {
+      const response = await fetch(`${API}/auth/signup`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),
@@ -66,7 +69,7 @@ export function SignupScreen({ navigation }: any) {
       }
 
       // Signup successful - now auto-login
-      const loginResponse = await fetch('http://192.168.1.146:3000/api/auth/login', {
+      const loginResponse = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

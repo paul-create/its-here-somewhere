@@ -4,6 +4,9 @@ import { TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
 import { AppHeaderComponent } from '../components/AppHeaderComponent';
+import { getApiUrl } from '../config/api';
+
+const API = `${getApiUrl()}/api`;
 
 export function AddLocationScreen({ navigation }: any) {
   const [name, setName] = useState('');
@@ -20,7 +23,7 @@ export function AddLocationScreen({ navigation }: any) {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/locations', {
+      const response = await fetch(`${API}/locations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

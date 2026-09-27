@@ -9,6 +9,9 @@ import { PhotoPreviewComponent } from '../components/PhotoPreviewComponent';
 import { TagEditorComponent } from '../components/TagEditorComponent';
 import axios from 'axios';
 import { AppHeaderComponent } from '../components/AppHeaderComponent';
+import { getApiUrl } from '../config/api';
+
+const API = `${getApiUrl()}/api`;
 
 interface Category {
   id: string;
@@ -55,7 +58,7 @@ export function AddScreen({ navigation }: any) {
     if (!token) return;
     setIsLoadingCategories(true);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/categories', {
+      const response = await fetch(`${API}/categories`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -73,7 +76,7 @@ export function AddScreen({ navigation }: any) {
     if (!token) return;
     setIsLoadingLocations(true);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/locations', {
+      const response = await fetch(`${API}/locations`, {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       const data = await response.json();
@@ -108,7 +111,7 @@ export function AddScreen({ navigation }: any) {
       } as any);
 
       const photoRes = await axios.post(
-        `http://192.168.1.146:3000/api/photos?itemId=${itemId}`,
+        `${API}/photos?itemId=${itemId}`,
         formDataObj,
         {
           headers: {
@@ -147,7 +150,7 @@ export function AddScreen({ navigation }: any) {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/items', {
+      const response = await fetch(`${API}/items`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

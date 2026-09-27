@@ -1,4 +1,7 @@
 import React, { createContext, useState } from 'react';
+import { getApiUrl } from '../config/api';
+
+const API = `${getApiUrl()}/api`;
 
 interface AuthContextType {
   token: string | null;
@@ -22,7 +25,7 @@ export function AuthProvider({ children }: any) {
     setIsLoading(true);
     setError(null);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/auth/login', {
+      const response = await fetch(`${API}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password }),

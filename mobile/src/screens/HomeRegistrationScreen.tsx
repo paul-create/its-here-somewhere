@@ -3,6 +3,9 @@ import { View, StyleSheet, ScrollView, TouchableOpacity, Text, ActivityIndicator
 import { TextInput } from 'react-native-paper';
 import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useAuth } from '../context/AuthContext';
+import { getApiUrl } from '../config/api';
+
+const API = `${getApiUrl()}/api`;
 
 export function HomeRegistrationScreen({ navigation }: any) {
   const [mode, setMode] = useState<'choose' | 'create' | 'join'>('choose');
@@ -27,7 +30,7 @@ export function HomeRegistrationScreen({ navigation }: any) {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/auth/create-home', {
+      const response = await fetch(`${API}/auth/create-home`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -62,7 +65,7 @@ export function HomeRegistrationScreen({ navigation }: any) {
 
     setIsLoading(true);
     try {
-      const response = await fetch('http://192.168.1.146:3000/api/auth/join-home', {
+      const response = await fetch(`${API}/auth/join-home`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

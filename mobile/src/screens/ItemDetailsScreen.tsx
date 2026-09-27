@@ -10,6 +10,9 @@ import axios from 'axios';
 import { PhotoPickerComponent } from '../components/PhotoPickerComponent';
 import { PhotoPreviewComponent } from '../components/PhotoPreviewComponent';
 import { TagSelectorComponent } from '../components/TagSelectorComponent';
+import { getApiUrl } from '../config/api';
+
+const API = `${getApiUrl()}/api`;
 
 // ============================================================================
 // INTERFACES
@@ -94,19 +97,19 @@ export function ItemDetailsScreen({ navigation, route }: any) {
       setIsLoading(true);
 
       const [itemRes, categoriesRes, locationsRes, photosRes, activityRes] = await Promise.all([
-        fetch(`http://192.168.1.146:3000/api/items/${itemId}`, {
+        fetch(`${API}/items/${itemId}`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://192.168.1.146:3000/api/categories', {
+        fetch(`${API}/categories`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://192.168.1.146:3000/api/locations', {
+        fetch(`${API}/locations`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch('http://192.168.1.146:3000/api/photos', {
+        fetch(`${API}/photos`, {
           headers: { 'Authorization': `Bearer ${token}` }
         }),
-        fetch(`http://192.168.1.146:3000/api/items/${itemId}/activity`, {
+        fetch(`${API}/items/${itemId}/activity`, {
           headers: { 'Authorization': `Bearer ${token}` }
         })
       ]);
@@ -135,7 +138,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
         // Fetch tags for this photo
         if (itemPhoto?.id) {
           try {
-            const tagsRes = await fetch(`http://192.168.1.146:3000/api/photos/${itemPhoto.id}/tags`, {
+            const tagsRes = await fetch(`${API}/photos/${itemPhoto.id}/tags`, {
               headers: { 'Authorization': `Bearer ${token}` }
             });
             if (tagsRes.ok) {
@@ -188,7 +191,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
     if (!token) return;
 
     try {
-      const res = await fetch(`http://192.168.1.146:3000/api/items/${itemId}/location`, {
+      const res = await fetch(`${API}/items/${itemId}/location`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -241,7 +244,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
 
     try {
       // Update item name and description
-      const updateRes = await fetch(`http://192.168.1.146:3000/api/items/${itemId}`, {
+      const updateRes = await fetch(`${API}/items/${itemId}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -259,7 +262,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
       if (newPhoto && newPhoto.uri) {
         // Delete old photo
         if (photo) {
-          await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}`, {
+          await fetch(`${API}/photos/${photo.id}`, {
             method: 'DELETE',
             headers: { 'Authorization': `Bearer ${token}` }
           });
@@ -274,7 +277,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
         } as any);
 
         const photoRes = await axios.post(
-          `http://192.168.1.146:3000/api/photos?itemId=${itemId}`,
+          `${API}/photos?itemId=${itemId}`,
           formDataObj,
           { headers: { 'Authorization': `Bearer ${token}` } }
         );
@@ -286,7 +289,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
         const tagsToDelete = [...originalTagIds].filter(id => !selectedTagIds.has(id));
         for (const tagId of tagsToDelete) {
           try {
-            await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}/tags/${tagId}`, {
+            await fetch(`${API}/photos/${photo.id}/tags/${tagId}`, {
               method: 'DELETE',
               headers: { 'Authorization': `Bearer ${token}` }
             });
@@ -315,7 +318,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
           text: 'Delete',
           onPress: async () => {
             try {
-              const res = await fetch(`http://192.168.1.146:3000/api/items/${itemId}`, {
+              const res = await fetch(`${API}/items/${itemId}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
               });
@@ -349,7 +352,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
     if (!token || !photo) return;
 
     try {
-      const res = await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}/tags`, {
+      const res = await fetch(`${API}/photos/${photo.id}/tags`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -378,7 +381,7 @@ export function ItemDetailsScreen({ navigation, route }: any) {
     if (!token || !photo) return;
 
     try {
-      const res = await fetch(`http://192.168.1.146:3000/api/photos/${photo.id}/tags/${tagId}`, {
+      const res = await fetch(`${API}/photos/${photo.id}/tags/${tagId}`, {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
